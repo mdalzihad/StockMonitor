@@ -1,0 +1,32 @@
+{
+  "watchlist": [
+    "GP",
+    "SQURPHARMA",
+    "MARICO"
+  ],
+  "refresh_interval_minutes": 5,
+  "always_on_top": true,
+  "google_chat_webhook_url": "",
+  "enable_google_chat": false,
+  "telegram_bot_token": "8986604985:AAEBcP5fYbWlgUvFc3rLTxdjdQgXIShovV0",
+  "telegram_chat_id": "StockRim_bot",
+  "enable_telegram": false,
+  "position": [
+    16390,
+    21531
+  ],
+  "alerts": [
+    {
+      "symbol": "GP",
+      "condition": "above",
+      "value": 300.0,
+      "triggered": false
+    },
+    {
+      "symbol": "BATBC",
+      "condition": "below",
+      "value": 350.0,
+      "triggered": true
+    }
+  ]
+}

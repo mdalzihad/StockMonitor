@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StockNow Pro | Advanced Market Dashboard</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="dashboard-body">
+  <div class="dashboard-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="dashboard-sidebar">
+      <div class="sidebar-brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          <polyline points="16 7 22 7 22 13"/>
+        </svg>
+        <div class="brand-text">
+          <h2>StockNow Pro</h2>
+          <span>DSE Analytics</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <span class="nav-label">Overview</span>
+          <button class="nav-item active" data-view="market">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Market Dashboard
+          </button>
+          <button class="nav-item" data-view="portfolio">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          Portfolio Viewer
+        </button>
+        <button class="nav-item" data-view="technical">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          Technical View
+        </button>
+        <button class="nav-item" data-view="momentum">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Momentum Trends
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <span class="nav-label">Your Watchlists</span>
+          <div id="sidebar-watchlists" class="sidebar-watchlist-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="settings-btn" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-main">
+      <header class="dashboard-header">
+        <div class="header-left">
+          <h1 id="view-title">Market Dashboard</h1>
+          <span id="current-watchlist-name">My Watchlist</span>
+        </div>
+        <div class="header-right">
+          <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="search-input" placeholder="Search instruments...">
+            <div id="search-results" class="search-results"></div>
+          </div>
+          <button id="refresh-btn" class="btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Refresh
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Views -->
+      <section id="market-view" class="dashboard-view active">
+        <div class="stats-grid">
+          <div class="stat-card index-card" id="index-dsex">
+            <span class="stat-label">DSEX Index</span>
+            <div class="stat-value">6,245.12</div>
+            <div class="stat-change positive">+12.45 (0.20%)</div>
+          </div>
+          <div class="stat-card index-card" id="index-ds30">
+            <span class="stat-label">DS30 Index</span>
+            <div class="stat-value">2,110.84</div>
+            <div class="stat-change negative">-5.12 (0.24%)</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Market Turnover</span>
+            <div class="stat-value" id="total-turnover">৳ 450.2M</div>
+            <div class="stat-sub">Updated just now</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Advancers / Decliners</span>
+            <div class="stat-value" id="market-breadth">142 / 120</div>
+            <div class="market-bar">
+              <div class="bar-up" style="width: 55%"></div>
+              <div class="bar-down" style="width: 45%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="view-content-grid">
+          <div class="main-table-container card">
+            <div class="card-header">
+              <h3>Watchlist Performance</h3>
+              <div class="table-actions">
+                <select id="sort-selector" class="small-select">
+                  <option value="symbol">Sort by Symbol</option>
+                  <option value="change">Sort by Change %</option>
+                  <option value="price">Sort by Price</option>
+                </select>
+              </div>
+            </div>
+            <table class="pro-table" id="watchlist-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Price</th>
+                  <th>Change</th>
+                  <th>Change %</th>
+                  <th>Trend (7D)</th>
+                  <th>Signal</th>
+                  <th>Technical Insight</th>
+                  <th>Volume</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dashboard-content">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Portfolio View -->
+      <section id="portfolio-view" class="dashboard-view">
+        <div class="stats-grid">
+          <div class="stat-card highlight">
+            <span class="stat-label">Total Portfolio Value</span>
+            <div class="stat-value" id="portfolio-total-value">৳ 0.00</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Total Investment</span>
+            <div class="stat-value" id="portfolio-total-investment">৳ 0.00</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Net Profit/Loss</span>
+            <div class="stat-value" id="portfolio-total-pl">৳ 0.00</div>
+            <div class="stat-change" id="portfolio-total-pl-percent">0.00%</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Holdings Analytics</h3>
+            <button class="btn-secondary" id="add-holding-btn">+ Add Holding</button>
+          </div>
+          <table class="pro-table" id="portfolio-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Avg. Buy</th>
+                <th>Quantity</th>
+                <th>Investment</th>
+                <th>Total Value</th>
+                <th>Net Value (0.4%)</th>
+                <th>P/L</th>
+                <th>P/L %</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="portfolio-content">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+      
+      <!-- Technical View (Charts) -->
+      <section id="technical-view" class="dashboard-view">
+        <div class="view-actions">
+          <div class="timeframe-selector">
+            <button class="btn-timeframe active" data-interval="D">Daily</button>
+            <button class="btn-timeframe" data-interval="W">Weekly</button>
+            <button class="btn-timeframe" data-interval="M">Monthly</button>
+          </div>
+          <div class="layout-selector">
+            <button class="btn-layout" data-layout="grid" title="Grid View">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            </button>
+            <button class="btn-layout active" data-layout="list" title="Wide View">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="7"/><rect x="3" y="14" width="18" height="7"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="charts-grid" id="technical-grid">
+          <!-- Charts populated via JS -->
+        </div>
+      </section>
+
+      <!-- Momentum View -->
+      <section id="momentum-view" class="dashboard-view">
+        <div class="card analysis-card">
+          <div class="card-header analysis-header">
+            <div class="header-info">
+              <h3>Momentum & Technical Dashboard</h3>
+              <p>Performance tracking and breakout signals for your watchlist</p>
+            </div>
+            <div class="header-badges">
+              <span class="badge">Active Analysis</span>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="dashboard-table wide-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>1 Month</th>
+                  <th>3 Month</th>
+                  <th>6 Month</th>
+                  <th>1 Year</th>
+                  <th>Signal</th>
+                  <th>Technical Insight</th>
+                </tr>
+              </thead>
+              <tbody id="momentum-content">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Insight Legend -->
+        <div class="card info-card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>Trading Intelligence Legend</h3>
+          </div>
+          <div class="info-grid">
+            <div class="info-section">
+              <h4>Signals</h4>
+              <p><strong style="color:#059669">Strong Buy:</strong> Strong uptrend + High momentum.</p>
+              <p><strong style="color:#f87171">Sell:</strong> Broken 30-day support + Negative momentum.</p>
+              <p><strong style="color:#fbbf24">Hold:</strong> Sideways consolidation or neutral trend.</p>
+            </div>
+            <div class="info-section">
+              <h4>Breakout Badges</h4>
+              <p><strong>💎 MAJOR:</strong> Price cleared 6-month resistance.</p>
+              <p><strong>🚀 BREAKOUT:</strong> Price cleared 30-day high.</p>
+              <p><strong>🎯 NEAR RESIST:</strong> Price within 1.5% of breakout level.</p>
+            </div>
+            <div class="info-section">
+              <h4>Trend & Pattern</h4>
+              <p><strong>📈 BULLISH CROSS:</strong> 15-day average crossed above 90-day.</p>
+              <p><strong>💤 CONSOLIDATING:</strong> Price in a tight < 5% range for 30 days.</p>
+              <p><strong>⚡ VOLATILE:</strong> Daily price swing exceeds 5%.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Detail Drawer -->
+  <div id="detail-drawer" class="drawer">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <div id="drawer-code" class="drawer-title">SYMBOL</div>
+        <div id="drawer-name" class="drawer-subtitle">Name</div>
+      </div>
+      <button id="drawer-close-btn" class="btn-icon">✕</button>
+    </div>
+    <div class="drawer-grid" id="drawer-stats-grid">
+      <!-- Standard stats here -->
+    </div>
+  </div>
+
+  <!-- Portfolio Edit Modal -->
+  <div id="portfolio-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Edit Holding: <span id="holding-symbol"></span></h3>
+        <button id="portfolio-modal-close" class="btn-icon">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group">
+          <span class="input-label">Average Buy Price</span>
+          <input type="number" id="buy-price-input" class="modal-input" step="0.01">
+        </div>
+        <div class="input-group">
+          <span class="input-label">Quantity</span>
+          <input type="number" id="buy-quantity-input" class="modal-input">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="portfolio-save-btn" class="btn-primary" style="width: 100%;">Save Holding</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>StockNow Watchlist Side Panel</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="sidepanel-layout">
+    <!-- Header -->
+    <header>
+      <div class="header-top">
+        <div class="brand">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+            <polyline points="16 7 22 7 22 13"/>
+          </svg>
+          <h1>StockNow BD</h1>
+        </div>
+        <div class="header-actions">
+          <button id="refresh-btn" class="btn-icon" title="Refresh prices">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
+          <button id="open-dashboard-btn" class="btn-icon" title="Open Full Dashboard">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="watchlist-nav">
+        <div class="select-watchlist-wrapper">
+          <select id="select-watchlist" class="select-watchlist">
+            <option value="default-list">Loading Watchlist...</option>
+          </select>
+        </div>
+        <button id="manage-watchlists-btn" class="btn-icon" title="Manage watchlists">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        <button id="settings-alerts-btn" class="btn-icon" title="Settings & Price Alerts">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Search Section -->
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <span class="search-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <input type="text" id="search-input" class="search-input" placeholder="Search stock symbol or name...">
+      </div>
+      <!-- Floating Autocomplete dropdown -->
+      <div id="search-results" class="search-results"></div>
+    </div>
+
+    <!-- Main Content List -->
+    <div id="dashboard-content" class="dashboard-content">
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <div class="loading-text">Fetching latest market prices...</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="sync-status">
+        <svg class="sync-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+        <span>Synced: <span id="last-reload-time">Loading...</span></span>
+        <span class="timer-separator">•</span>
+        <span>Next: <span id="next-update-countdown">Loading...</span></span>
+      </div>
+      <div class="footer-source">Data: StockNow</div>
+    </footer>
+
+    <!-- Watchlist Manager Modal -->
+    <div id="watchlist-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Manage Watchlists</h3>
+          <button id="modal-close-btn" class="btn-icon" style="border:none; width:20px; height:20px;">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-group">
+            <span class="input-label">Watchlists list</span>
+            <div id="watchlist-management-list" class="watchlist-management-list">
+              <!-- Rendered dynamically in app.js -->
+            </div>
+          </div>
+          <div class="input-group" style="margin-top: 8px;">
+            <span class="input-label">New Watchlist Name</span>
+            <input type="text" id="new-watchlist-name" class="modal-input" placeholder="e.g. Banks, Pharma...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="modal-cancel-btn" class="btn-secondary">Cancel</button>
+          <button id="create-watchlist-btn" class="btn-primary">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings & Alerts Modal -->
+    <div id="settings-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Settings & Price Alerts</h3>
+          <button id="settings-close-btn" class="btn-icon" style="border:none; width:20px; height:20px;">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Polling Interval -->
+          <div class="input-group">
+            <span class="input-label">Background Refresh Interval</span>
+            <select id="polling-interval-select" class="modal-input-select" style="width: 100%; padding: 8px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main);">
+              <option value="1">Every 1 Minute</option>
+              <option value="5">Every 5 Minutes (Recommended)</option>
+              <option value="15">Every 15 Minutes</option>
+              <option value="30">Every 30 Minutes</option>
+              <option value="60">Every 1 Hour</option>
+              <option value="0">Disabled (Manual Only)</option>
+            </select>
+          </div>
+
+          <div class="input-group" style="margin-top: 12px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+              <span class="input-label" style="margin: 0;">Show Charts (Sparklines)</span>
+              <input type="checkbox" id="show-charts-enable" style="cursor: pointer; width: 16px; height: 16px; margin: 0;">
+            </label>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
+          
+          <!-- Price Alerts Section -->
+          <div class="alerts-section">
+            <span class="input-label">Create Price Alert</span>
+            <div class="alert-form" style="display: flex; gap: 6px; margin-top: 6px;">
+              <select id="alert-symbol-select" class="modal-input-select" style="flex: 2; padding: 6px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main); font-size: 12px;"></select>
+              <select id="alert-condition-select" class="modal-input-select" style="flex: 1.5; padding: 6px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main); font-size: 12px;">
+                <option value="above">≥</option>
+                <option value="below">≤</option>
+              </select>
+              <input type="number" id="alert-value-input" class="modal-input" placeholder="Value" style="flex: 2.5; padding: 6px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main); font-size: 12px;" step="0.01">
+              <button id="add-alert-btn" class="btn-primary" style="padding: 6px 10px; font-size: 11px;">Add</button>
+            </div>
+            
+            <span class="input-label" style="margin-top: 12px; display: block;">Active Price Alerts</span>
+            <div id="alerts-list-container" class="watchlist-management-list" style="margin-top: 6px; max-height: 110px; overflow-y: auto;">
+              <!-- Rendered dynamically in app.js -->
+            </div>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
+          
+          <!-- Google Chat Section -->
+          <div class="input-group">
+            <span class="input-label">Google Workspace Integration</span>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 4px; cursor: pointer; color: var(--text-secondary);">
+              <input type="checkbox" id="gchat-alerts-enable" style="cursor: pointer; margin: 0;">
+              Enable Google Chat Alerts
+            </label>
+            <input type="text" id="gchat-webhook-input" class="modal-input" placeholder="Paste Google Chat Webhook URL" style="margin-top: 6px; font-size: 11px; padding: 6px 8px;">
+          </div>
+
+          <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
+
+          <!-- Telegram Bot Section -->
+          <div class="input-group">
+            <span class="input-label">Telegram Integration</span>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 4px; cursor: pointer; color: var(--text-secondary);">
+              <input type="checkbox" id="telegram-alerts-enable" style="cursor: pointer; margin: 0;">
+              Enable Telegram Alerts
+            </label>
+            <input type="text" id="telegram-token-input" class="modal-input" placeholder="Telegram Bot Token" style="margin-top: 6px; font-size: 11px; padding: 6px 8px;">
+            <input type="text" id="telegram-chatid-input" class="modal-input" placeholder="Telegram Chat ID (e.g. 123456789)" style="margin-top: 6px; font-size: 11px; padding: 6px 8px;">
+            <span style="font-size: 9px; color: var(--text-secondary); margin-top: 2px; line-height: 1.3;">Tip: Get your numerical ID by sending /start to <b>@userinfobot</b>. You must also send /start to <b>your own bot</b> to authorize it.</span>
+            <button id="telegram-test-btn" class="btn-secondary" style="margin-top: 6px; font-size: 11px; padding: 4px 8px; width: 100%;">Test Bot Connection</button>
+          </div>
+        </div>
+        <div class="modal-footer" style="margin-top: 12px;">
+          <button id="settings-save-btn" class="btn-primary" style="width: 100%;">Save & Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail Drawer (Slide-up from bottom) -->
+    <div id="detail-drawer" class="drawer">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <div id="drawer-code" class="drawer-title">GP</div>
+          <div id="drawer-name" class="drawer-subtitle">Grameenphone Ltd.</div>
+        </div>
+        <button id="drawer-close-btn" class="btn-icon" style="border:none; width:24px; height:24px;">✕</button>
+      </div>
+      
+      <div class="drawer-grid">
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Close Price</span>
+          <span id="stat-close" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item" style="grid-column: span 2;">
+          <span class="drawer-grid-label">Price Change</span>
+          <span id="stat-change" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Open</span>
+          <span id="stat-open" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">High</span>
+          <span id="stat-high" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Low</span>
+          <span id="stat-low" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">YCP</span>
+          <span id="stat-ycp" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Volume</span>
+          <span id="stat-volume" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Value (Tk)</span>
+          <span id="stat-value" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Category</span>
+          <span id="stat-category" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item">
+          <span class="drawer-grid-label">Sector ID</span>
+          <span id="stat-sector" class="drawer-grid-value">—</span>
+        </div>
+        <div class="drawer-grid-item" style="grid-column: span 2;">
+          <span class="drawer-grid-label">Last Updated</span>
+          <span id="stat-updated" class="drawer-grid-value" style="font-size: 11px; white-space: nowrap;">—</span>
+        </div>
+      </div>
+      
+      <div class="drawer-footer">
+        Data provided by StockNow Bangladesh
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
