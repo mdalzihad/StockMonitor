@@ -279,6 +279,85 @@ function setupEventListeners() {
       }
     });
 
+    // Export transaction history as JSON file
+    document.getElementById("export-history-btn")?.addEventListener("click", () => {
+      if (state.history.length === 0) {
+        alert("No transactions to export.");
+        return;
+      }
+      const data = JSON.stringify(state.history, null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stocknow-transactions-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Import transaction history from JSON file
+    document.getElementById("import-history-btn")?.addEventListener("click", () => {
+      document.getElementById("import-history-file")?.click();
+    });
+
+    document.getElementById("import-history-file")?.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text);
+
+        if (!Array.isArray(imported)) {
+          alert("Invalid file: expected a JSON array of transactions.");
+          return;
+        }
+
+        // Validate each transaction has required fields
+        const valid = imported.every(tx =>
+          tx.date && tx.symbol && tx.type && tx.count !== undefined && tx.price !== undefined
+        );
+        if (!valid) {
+          alert("Invalid file: each transaction must have date, symbol, type, count, and price.");
+          return;
+        }
+
+        const action = confirm(
+          `Found ${imported.length} transaction(s).\n\nOK = Merge with existing (${state.history.length} records)\nCancel = Replace all existing`
+        );
+
+        if (action) {
+          // Merge: add imported, avoid duplicates by id
+          const existingIds = new Set(state.history.map(tx => tx.id));
+          const newTxns = imported.map(tx => ({
+            ...tx,
+            id: tx.id && !existingIds.has(tx.id) ? tx.id : Date.now() + Math.random(),
+            count: parseFloat(tx.count),
+            price: parseFloat(tx.price)
+          }));
+          state.history = [...state.history, ...newTxns];
+        } else {
+          // Replace
+          state.history = imported.map(tx => ({
+            ...tx,
+            id: tx.id || Date.now() + Math.random(),
+            count: parseFloat(tx.count),
+            price: parseFloat(tx.price)
+          }));
+        }
+
+        state.history.sort((a, b) => new Date(b.date) - new Date(a.date));
+        await saveWatchlistsToStorage();
+        renderDashboardUI();
+        alert(`Successfully imported ${imported.length} transaction(s).`);
+      } catch (err) {
+        alert("Failed to import: " + err.message);
+      }
+
+      // Reset file input so same file can be re-imported
+      e.target.value = "";
+    });
+
     // Set default date to today
     const dateInput = document.getElementById("hist-date");
     if (dateInput) {
