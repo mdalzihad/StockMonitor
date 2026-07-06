@@ -6,7 +6,8 @@ let state = {
   isLoading: false,
   showCharts: true, // Default to true
   portfolio: {},   // Symbol-keyed: {symbol, buyPrice, quantity}
-  currentView: 'market', // For dashboard: market, portfolio, momentum
+  history: [],     // Array of transactions: {id, date, symbol, type, count, price, commission}
+  currentView: 'market', // For dashboard: market, portfolio, momentum, history
   chartLayout: 'list',   // Default to list (one per row)
   isDashboard: document.body.classList.contains('dashboard-body')
 };
@@ -60,7 +61,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Load Watchlists & Active Selection from chrome.storage.local
 async function loadStateFromStorage() {
-  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "showCharts", "portfolio"]);
+  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "showCharts", "portfolio", "transactionHistory"]);
   
   if (data.showCharts !== undefined) {
     state.showCharts = data.showCharts;
@@ -68,6 +69,10 @@ async function loadStateFromStorage() {
 
   if (data.portfolio) {
     state.portfolio = data.portfolio;
+  }
+
+  if (data.transactionHistory) {
+    state.history = data.transactionHistory;
   }
 
   if (data.watchlists && data.watchlists.length > 0) {
@@ -91,7 +96,8 @@ async function saveWatchlistsToStorage() {
   await chrome.storage.local.set({
     watchlists: state.watchlists,
     activeWatchlistId: state.activeId,
-    portfolio: state.portfolio
+    portfolio: state.portfolio,
+    transactionHistory: state.history
   });
 }
 
@@ -255,6 +261,29 @@ function setupEventListeners() {
         }, 3000);
       }
     });
+
+    document.getElementById("go-to-history-btn")?.addEventListener("click", () => {
+       switchDashboardView('history');
+    });
+
+    document.getElementById("history-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await addTransactionFromForm();
+    });
+
+    document.getElementById("clear-history-btn")?.addEventListener("click", async () => {
+      if (confirm("Are you sure you want to clear all transaction history?")) {
+        state.history = [];
+        await saveWatchlistsToStorage();
+        renderDashboardUI();
+      }
+    });
+
+    // Set default date to today
+    const dateInput = document.getElementById("hist-date");
+    if (dateInput) {
+      dateInput.valueAsDate = new Date();
+    }
   }
 
   // Watchlist Manager Modal Elements
@@ -1102,6 +1131,8 @@ function renderDashboardUI() {
     renderMomentumView();
   } else if (state.currentView === 'technical') {
     renderTechnicalView();
+  } else if (state.currentView === 'history') {
+    renderHistoryView();
   }
 }
 
@@ -1121,7 +1152,8 @@ function switchDashboardView(view) {
     'market': 'Market Dashboard',
     'portfolio': 'Portfolio Viewer',
     'technical': 'Technical Chart Gallery',
-    'momentum': 'Momentum Trends'
+    'momentum': 'Momentum Trends',
+    'history': 'Transaction History'
   };
   document.getElementById("view-title").innerText = viewTitles[view];
 
@@ -1267,88 +1299,193 @@ function updateMarketIndices() {
 function renderPortfolioView() {
   const tbody = document.getElementById("portfolio-content");
   if (!tbody) return;
-  const portfolioSymbols = Object.keys(state.portfolio);
-  let totalValue = 0;
-  let totalInvestment = 0;
 
-  tbody.innerHTML = portfolioSymbols.map(symbol => {
+  // Pivot Table Logic: Aggregate history into holdings
+  const holdings = {};
+  let totalCashFlow = 0; // Net cash from buys (-) and sells (+)
+
+  state.history.forEach(tx => {
+    const symbol = tx.symbol;
+    if (!holdings[symbol]) {
+      holdings[symbol] = {
+        totalSharesBought: 0,
+        totalCashInvested: 0,
+        remainingShares: 0,
+        realisedPL: 0,
+        netCashFlow: 0, // Individual stock cash flow
+        txCount: 0
+      };
+    }
+
+    const txCount = parseFloat(tx.count);
+    const txPrice = parseFloat(tx.price);
+    const commissionPct = getEffectiveCommission(tx.commission);
+    const rawTotal = txCount * txPrice;
+    const commission = rawTotal * (commissionPct / 100);
+
+    if (tx.type === 'buy') {
+      const spent = rawTotal + commission;
+      holdings[symbol].totalSharesBought += txCount;
+      holdings[symbol].totalCashInvested += spent;
+      holdings[symbol].remainingShares += txCount;
+      holdings[symbol].netCashFlow -= spent;
+      totalCashFlow -= spent;
+    } else {
+      const earned = rawTotal - commission;
+      holdings[symbol].remainingShares -= txCount;
+      holdings[symbol].netCashFlow += earned;
+      totalCashFlow += earned;
+      
+      // Calculate Realised P/L for this sell
+      // Pro-rata cost of shares sold
+      const avgCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalCashInvested / holdings[symbol].totalSharesBought) : 0;
+      const costOfSoldShares = txCount * avgCostPerShare;
+      holdings[symbol].realisedPL += (earned - costOfSoldShares);
+    }
+  });
+
+  const symbols = Object.keys(holdings).filter(s => holdings[s].remainingShares !== 0 || holdings[s].netCashFlow !== 0);
+  
+  let totalPortfolioValue = 0;
+  let totalRealisedPL = 0;
+  let totalUnrealisedPL = 0;
+
+  tbody.innerHTML = symbols.map(symbol => {
+    const h = holdings[symbol];
     const data = state.instruments[symbol];
-    const holding = state.portfolio[symbol];
-    if (!data) return "";
-
-    const price = parseFloat(data.close) || 0;
-    const buyPrice = parseFloat(holding.buyPrice) || 0;
-    const quantity = parseInt(holding.quantity) || 0;
+    const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
     
-    const investment = buyPrice * quantity;
-    const totalValueRaw = price * quantity;
-    const commission = totalValueRaw * 0.004; // 0.4% commission
-    const netValue = totalValueRaw - commission;
+    // Net Avg Price (break-even) = net money spent / remaining shares
+    // netCashFlow is negative for net spending, so -netCashFlow = money still invested
+    const netMoneyInvested = -h.netCashFlow; // positive = you've spent more than earned
+    const netAvgPrice = h.remainingShares > 0 ? Math.max(0, netMoneyInvested / h.remainingShares) : 0;
     
-    const pl = netValue - investment;
-    const plPercent = investment ? (pl / investment) * 100 : 0;
-    const isPositive = pl >= 0;
+    const remainingValue = h.remainingShares * currentPrice;
+    
+    // Original avg cost for unrealised P/L (avoids double-counting with realised P/L)
+    const origAvgCost = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
+    const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * origAvgCost)) : 0;
+    const totalPL = h.realisedPL + unrealisedPL;
 
-    totalValue += netValue;
-    totalInvestment += investment;
+    totalPortfolioValue += remainingValue;
+    totalRealisedPL += h.realisedPL;
+    totalUnrealisedPL += unrealisedPL;
 
     return `
       <tr>
         <td style="font-weight:700;">${symbol}</td>
-        <td>${price.toFixed(2)}</td>
-        <td>${buyPrice.toFixed(2)}</td>
-        <td>${quantity}</td>
-        <td>৳ ${investment.toLocaleString()}</td>
-        <td>৳ ${totalValueRaw.toLocaleString()}</td>
-        <td style="font-weight:700;">৳ ${netValue.toLocaleString()}</td>
-        <td class="${isPositive ? 'positive' : 'negative'}">৳ ${pl.toLocaleString()}</td>
-        <td>
-          <span class="stock-change ${isPositive ? 'positive' : 'negative'}">
-            ${isPositive ? '+' : ''}${plPercent.toFixed(2)}%
-          </span>
-        </td>
-        <td>
-          <div style="display:flex; gap:8px;">
-            <button class="btn-icon btn-edit-holding" data-symbol="${symbol}" title="Edit Holding" style="width:28px; height:28px; border-radius:6px; background:var(--primary-glow); color:var(--primary); border:none;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="btn-icon btn-remove-holding" data-symbol="${symbol}" title="Remove Holding" style="width:28px; height:28px; border-radius:6px; background:var(--red-bg); color:var(--red); border:none;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
-            </button>
-          </div>
-        </td>
+        <td>${currentPrice > 0 ? currentPrice.toFixed(2) : '—'}</td>
+        <td>${h.remainingShares}</td>
+        <td>৳ ${h.netCashFlow.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td>${netAvgPrice.toFixed(2)}</td>
+        <td class="${unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td class="${h.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${h.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td class="${totalPL >= 0 ? 'positive' : 'negative'}" style="font-weight:700;">৳ ${totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
       </tr>
     `;
   }).join("");
 
-  const totalPL = totalValue - totalInvestment;
-  const totalPLPct = totalInvestment ? (totalPL / totalInvestment) * 100 : 0;
+  const totalPL = totalRealisedPL + totalUnrealisedPL;
+  const totalInvestment = totalPortfolioValue - totalUnrealisedPL; // Not perfect but a proxy
+  const totalPLPct = totalInvestment > 0 ? (totalPL / Math.abs(totalInvestment)) * 100 : 0;
 
-  document.getElementById("portfolio-total-value").innerText = `৳ ${totalValue.toLocaleString()}`;
-  document.getElementById("portfolio-total-investment").innerText = `৳ ${totalInvestment.toLocaleString()}`;
+  document.getElementById("portfolio-total-value").innerText = `৳ ${totalPortfolioValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+  document.getElementById("portfolio-cash-balance").innerText = `৳ ${totalCashFlow.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
   
   const plEl = document.getElementById("portfolio-total-pl");
-  plEl.innerText = `৳ ${totalPL.toLocaleString()}`;
+  plEl.innerText = `৳ ${totalPL.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
   plEl.className = `stat-value ${totalPL >= 0 ? 'positive' : 'negative'}`;
 
   const plPctEl = document.getElementById("portfolio-total-pl-percent");
   plPctEl.innerText = `${totalPL >= 0 ? '+' : ''}${totalPLPct.toFixed(2)}%`;
   plPctEl.className = `stat-change ${totalPL >= 0 ? 'positive' : 'negative'}`;
+}
 
-  tbody.querySelectorAll(".btn-edit-holding").forEach(btn => {
-    btn.addEventListener("click", () => openPortfolioEdit(btn.dataset.symbol));
-  });
+async function addTransactionFromForm() {
+  const date = document.getElementById("hist-date").value;
+  const symbol = document.getElementById("hist-symbol").value.toUpperCase();
+  const type = document.getElementById("hist-type").value;
+  const count = parseFloat(document.getElementById("hist-count").value);
+  const price = parseFloat(document.getElementById("hist-price").value);
+  const commission = getEffectiveCommission(document.getElementById("hist-commission").value);
 
-  tbody.querySelectorAll(".btn-remove-holding").forEach(btn => {
+  if (!symbol || isNaN(count) || isNaN(price)) {
+    alert("Please fill all required fields correctly.");
+    return;
+  }
+
+  const transaction = {
+    id: Date.now(),
+    date,
+    symbol,
+    type,
+    count,
+    price,
+    commission: document.getElementById("hist-commission").value
+  };
+
+  state.history.push(transaction);
+  state.history.sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date desc
+
+  await saveWatchlistsToStorage();
+  
+  // Clear inputs
+  document.getElementById("hist-symbol").value = "";
+  document.getElementById("hist-count").value = "";
+  document.getElementById("hist-price").value = "";
+  
+  renderDashboardUI();
+}
+
+function renderHistoryView() {
+  const tbody = document.getElementById("history-content");
+  if (!tbody) return;
+
+  // Populate symbols datalist for autocompletion
+  const datalist = document.getElementById("symbols-list");
+  if (datalist) {
+    datalist.innerHTML = Object.keys(state.instruments).map(sym => `<option value="${sym}">`).join("");
+  }
+
+  tbody.innerHTML = state.history.map(tx => {
+    const rawComm = tx.commission;
+    const effectiveComm = getEffectiveCommission(rawComm);
+    const rawTotal = tx.count * tx.price;
+    const commissionVal = rawTotal * (effectiveComm / 100);
+    const total = tx.type === 'buy' ? (rawTotal + commissionVal) : (rawTotal - commissionVal);
+
+    return `
+      <tr>
+        <td>${tx.date}</td>
+        <td style="font-weight:700;">${tx.symbol}</td>
+        <td><span class="type-pill ${tx.type}">${tx.type}</span></td>
+        <td>${tx.count}</td>
+        <td>${tx.price.toFixed(2)}</td>
+        <td>${effectiveComm}%</td>
+        <td style="font-weight:600;">৳ ${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+        <td>
+          <button class="btn-delete-history" data-id="${tx.id}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  tbody.querySelectorAll(".btn-delete-history").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const symbol = btn.dataset.symbol;
-      if (confirm(`Remove ${symbol} from portfolio?`)) {
-        delete state.portfolio[symbol];
-        await saveWatchlistsToStorage();
-        renderPortfolioView();
-      }
+      const id = parseInt(btn.dataset.id);
+      state.history = state.history.filter(tx => tx.id !== id);
+      await saveWatchlistsToStorage();
+      renderHistoryView();
     });
   });
+}
+
+function getEffectiveCommission(val) {
+  if (val === "" || val === null || val === undefined) return 0.4;
+  const comm = parseFloat(val);
+  return isNaN(comm) ? 0.4 : comm;
 }
 
 function renderTechnicalView() {

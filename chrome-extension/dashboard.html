@@ -40,6 +40,10 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
             Momentum Trends
           </button>
+          <button class="nav-item" data-view="history">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            Transaction History
+          </button>
         </div>
 
         <div class="nav-section">
@@ -148,8 +152,8 @@
             <div class="stat-value" id="portfolio-total-value">৳ 0.00</div>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Total Investment</span>
-            <div class="stat-value" id="portfolio-total-investment">৳ 0.00</div>
+            <span class="stat-label">Total Cash Balance</span>
+            <div class="stat-value" id="portfolio-cash-balance">৳ 0.00</div>
           </div>
           <div class="stat-card">
             <span class="stat-label">Net Profit/Loss</span>
@@ -160,28 +164,104 @@
 
         <div class="card">
           <div class="card-header">
-            <h3>Holdings Analytics</h3>
-            <button class="btn-secondary" id="add-holding-btn">+ Add Holding</button>
+            <h3>Holdings Portfolio (Calculated)</h3>
+            <div class="header-actions">
+               <button class="btn-secondary" id="go-to-history-btn">Add Transaction</button>
+            </div>
           </div>
           <table class="pro-table" id="portfolio-table">
             <thead>
               <tr>
-                <th>Symbol</th>
-                <th>Price</th>
-                <th>Avg. Buy</th>
-                <th>Quantity</th>
-                <th>Investment</th>
-                <th>Total Value</th>
-                <th>Net Value (0.4%)</th>
-                <th>P/L</th>
-                <th>P/L %</th>
-                <th>Actions</th>
+                <th>Stock Name</th>
+                <th>Current Price</th>
+                <th>Remaining Shares</th>
+                <th>Net Cash Balance</th>
+                <th>Avg. Price / Share</th>
+                <th>Unrealized P/L</th>
+                <th>Realised P/L</th>
+                <th>Total P/L</th>
               </tr>
             </thead>
             <tbody id="portfolio-content">
               <!-- Populated via JS -->
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- History View -->
+      <section id="history-view" class="dashboard-view">
+        <div class="history-layout">
+          <div class="card history-form-card">
+            <div class="card-header">
+              <h3>Add New Transaction</h3>
+            </div>
+            <div class="card-body">
+              <form id="history-form" class="transaction-form">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="hist-date" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Stock Name</label>
+                    <input type="text" id="hist-symbol" list="symbols-list" placeholder="SYMBOL" required>
+                    <datalist id="symbols-list"></datalist>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Buy/Sell</label>
+                    <select id="hist-type" required>
+                      <option value="buy">Buy</option>
+                      <option value="sell">Sell</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Count (Quantity)</label>
+                    <input type="number" id="hist-count" step="1" required>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Price / Stock</label>
+                    <input type="number" id="hist-price" step="0.01" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Commission %</label>
+                    <input type="number" id="hist-commission" step="0.01" value="0.4">
+                  </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">Add to History</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="card history-table-card">
+            <div class="card-header">
+              <h3>Transaction Log</h3>
+              <button class="btn-secondary" id="clear-history-btn">Clear All</button>
+            </div>
+            <div class="table-container">
+              <table class="pro-table" id="history-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Stock</th>
+                    <th>Type</th>
+                    <th>Count</th>
+                    <th>Price</th>
+                    <th>Comm.</th>
+                    <th>Spent/Earned</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="history-content">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
       

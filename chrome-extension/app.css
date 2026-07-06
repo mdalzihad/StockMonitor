@@ -801,6 +801,106 @@ header {
   opacity: 1;
 }
 
+/* History View Styles */
+.history-layout {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media screen and (max-width: 1024px) {
+  .history-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.transaction-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input, .form-group select {
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 13px;
+  transition: var(--transition-smooth);
+}
+
+.form-group input:focus, .form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--border-glow);
+}
+
+.history-table-card .table-container {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.btn-delete-history {
+  color: var(--red);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.btn-delete-history:hover {
+  background: var(--red-bg);
+}
+
+.type-pill {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.type-pill.buy {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.type-pill.sell {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+#portfolio-content tr td:nth-child(n+4) {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+}
+
+
 .btn-delete-card:hover {
   background: var(--red);
   color: white;
