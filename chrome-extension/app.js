@@ -1524,6 +1524,7 @@ function renderPortfolioView() {
       holdings[symbol] = {
         totalSharesBought: 0,
         totalCashInvested: 0,
+        totalRawInvested: 0,
         remainingShares: 0,
         realisedPL: 0,
         netCashFlow: 0,
@@ -1541,6 +1542,7 @@ function renderPortfolioView() {
       const spent = rawTotal + commission;
       holdings[symbol].totalSharesBought += txCount;
       holdings[symbol].totalCashInvested += spent;
+      holdings[symbol].totalRawInvested += rawTotal;
       holdings[symbol].remainingShares += txCount;
       holdings[symbol].netCashFlow -= spent;
       totalCashFlow -= spent;
@@ -1553,6 +1555,9 @@ function renderPortfolioView() {
       const costOfSoldShares = sellCount * avgCostPerShare;
       holdings[symbol].realisedPL += (earned - costOfSoldShares);
 
+      // Reduce raw investment proportionally
+      const rawCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalRawInvested / holdings[symbol].totalSharesBought) : 0;
+      holdings[symbol].totalRawInvested -= sellCount * rawCostPerShare;
       holdings[symbol].totalSharesBought -= sellCount;
       holdings[symbol].totalCashInvested -= costOfSoldShares;
 
@@ -1570,11 +1575,13 @@ function renderPortfolioView() {
     const data = state.instruments[symbol];
     const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
 
-    // Weighted-average cost of remaining shares (cost basis pool tracks this correctly after sells)
-    const netAvgPrice = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
+    // Avg price per share = raw purchase price (without commission) for display
+    const netAvgPrice = h.totalSharesBought > 0 ? (h.totalRawInvested / h.totalSharesBought) : 0;
+    // Cost basis per share (with commission) for P/L calculations
+    const costBasisPerShare = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
     const remainingValue = h.remainingShares * currentPrice;
 
-    const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * netAvgPrice)) : 0;
+    const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * costBasisPerShare)) : 0;
     const totalPL = h.realisedPL + unrealisedPL;
 
     return {
