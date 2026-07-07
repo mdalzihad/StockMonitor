@@ -17,10 +17,20 @@ let state = {
   portfolioFilterHolding: 'all', // 'all' | 'active' | 'closed'
   drawerSymbol: null,
   editingSymbol: null,
-  chartInterval: 'D'
+  chartInterval: 'D',
+  historySort: { key: 'date', dir: 'desc' },
+  historySearch: '',
+  historyFilterType: 'all',
+  marketSort: { key: 'symbol', dir: 'asc' },
+  marketSearch: '',
+  momentumSort: { key: 'ret1m', dir: 'desc' },
+  momentumSearch: ''
 };
 
 let portfolioSearchTimer;
+let historySearchTimer;
+let marketSearchTimer;
+let momentumSearchTimer;
 
 // Initialize the Application
 document.addEventListener("DOMContentLoaded", async () => {
@@ -257,8 +267,76 @@ function setupEventListeners() {
       await savePortfolioHolding();
     });
     
-    document.getElementById("sort-selector")?.addEventListener("change", (e) => {
-      renderDashboardUI();
+    // Market search (debounced)
+    document.getElementById("market-search")?.addEventListener("input", (e) => {
+      clearTimeout(marketSearchTimer);
+      marketSearchTimer = setTimeout(() => {
+        state.marketSearch = e.target.value.trim().toUpperCase();
+        renderMarketWatchlist();
+      }, 200);
+    });
+
+    // Market table column sort
+    document.getElementById("watchlist-table")?.addEventListener("click", (e) => {
+      const th = e.target.closest(".sortable-th");
+      if (!th) return;
+      const key = th.dataset.sortKey;
+      if (state.marketSort.key === key) {
+        state.marketSort.dir = state.marketSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.marketSort = { key, dir: key === 'symbol' ? 'asc' : 'desc' };
+      }
+      renderMarketWatchlist();
+    });
+
+    // History search (debounced)
+    document.getElementById("history-search")?.addEventListener("input", (e) => {
+      clearTimeout(historySearchTimer);
+      historySearchTimer = setTimeout(() => {
+        state.historySearch = e.target.value.trim().toUpperCase();
+        renderHistoryView();
+      }, 200);
+    });
+
+    // History type filter
+    document.getElementById("history-filter-type")?.addEventListener("change", (e) => {
+      state.historyFilterType = e.target.value;
+      renderHistoryView();
+    });
+
+    // History table column sort
+    document.getElementById("history-table")?.addEventListener("click", (e) => {
+      const th = e.target.closest(".sortable-th");
+      if (!th) return;
+      const key = th.dataset.sortKey;
+      if (state.historySort.key === key) {
+        state.historySort.dir = state.historySort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.historySort = { key, dir: key === 'date' ? 'desc' : 'asc' };
+      }
+      renderHistoryView();
+    });
+
+    // Momentum search (debounced)
+    document.getElementById("momentum-search")?.addEventListener("input", (e) => {
+      clearTimeout(momentumSearchTimer);
+      momentumSearchTimer = setTimeout(() => {
+        state.momentumSearch = e.target.value.trim().toUpperCase();
+        renderMomentumView();
+      }, 200);
+    });
+
+    // Momentum table column sort
+    document.getElementById("momentum-table")?.addEventListener("click", (e) => {
+      const th = e.target.closest(".sortable-th");
+      if (!th) return;
+      const key = th.dataset.sortKey;
+      if (state.momentumSort.key === key) {
+        state.momentumSort.dir = state.momentumSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.momentumSort = { key, dir: key === 'symbol' ? 'asc' : 'desc' };
+      }
+      renderMomentumView();
     });
 
     document.getElementById("add-holding-btn")?.addEventListener("click", () => {
@@ -1398,37 +1476,36 @@ function renderMarketWatchlist() {
   const tbody = document.getElementById("dashboard-content");
   if (!tbody || !activeList) return;
 
-  const sortVal = document.getElementById("sort-selector")?.value || 'symbol';
-  
-  let symbols = [...activeList.symbols];
-  
-  if (sortVal === 'change') {
-    symbols.sort((a, b) => {
-      const dataA = state.instruments[a];
-      const dataB = state.instruments[b];
-      const changeA = dataA ? (parseFloat(dataA.close) - parseFloat(dataA.ycp)) / parseFloat(dataA.ycp) : -999;
-      const changeB = dataB ? (parseFloat(dataB.close) - parseFloat(dataB.ycp)) / parseFloat(dataB.ycp) : -999;
-      return changeB - changeA;
-    });
-  } else if (sortVal === 'price') {
-    symbols.sort((a, b) => {
-      const dataA = state.instruments[a];
-      const dataB = state.instruments[b];
-      return (parseFloat(dataB?.close) || 0) - (parseFloat(dataA?.close) || 0);
-    });
-  }
-
-  tbody.innerHTML = symbols.map(symbol => {
+  // Build data array
+  let rows = activeList.symbols.map(symbol => {
     const data = state.instruments[symbol];
-    if (!data) return "";
-
+    if (!data) return null;
     const price = parseFloat(data.close) || 0;
     const ycp = parseFloat(data.ycp) || 0;
     const change = price - ycp;
     const changePercent = ycp ? (change / ycp) * 100 : 0;
-    const isPositive = change >= 0;
+    const volume = parseInt(data.volume, 10) || 0;
+    return { symbol, data, price, ycp, change, changePercent, volume, isPositive: change >= 0 };
+  }).filter(r => r !== null);
 
-    return `
+  // Filter by search
+  if (state.marketSearch) {
+    rows = rows.filter(r => r.symbol.includes(state.marketSearch));
+  }
+
+  // Sort
+  const { key, dir } = state.marketSort;
+  rows.sort((a, b) => {
+    let cmp = 0;
+    if (key === 'symbol') cmp = a.symbol.localeCompare(b.symbol);
+    else if (key === 'price') cmp = a.price - b.price;
+    else if (key === 'change') cmp = a.change - b.change;
+    else if (key === 'changePercent') cmp = a.changePercent - b.changePercent;
+    else if (key === 'volume') cmp = a.volume - b.volume;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  tbody.innerHTML = rows.map(({ symbol, data, price, change, changePercent, volume, isPositive }) => `
       <tr data-symbol="${symbol}">
         <td>
           <div style="display:flex; flex-direction:column;">
@@ -1454,7 +1531,7 @@ function renderMarketWatchlist() {
         <td style="font-size:11px; font-weight:600;">
           ${calculateTechnicalInsight(data)}
         </td>
-        <td>${(parseInt(data.volume, 10) || 0).toLocaleString()}</td>
+        <td>${volume.toLocaleString()}</td>
         <td>
           <div style="display:flex; gap:8px;">
             <button class="btn-icon btn-portfolio-edit" data-symbol="${symbol}" title="Add to Portfolio" style="width:28px; height:28px; border-radius:6px; background:var(--primary-glow); color:var(--primary); border:none;">
@@ -1466,8 +1543,19 @@ function renderMarketWatchlist() {
           </div>
         </td>
       </tr>
-    `;
-  }).join("");
+    `).join("");
+
+  // Sort indicators
+  document.querySelectorAll("#watchlist-table .sortable-th").forEach(th => {
+    const indicator = th.querySelector(".sort-indicator");
+    if (th.dataset.sortKey === state.marketSort.key) {
+      indicator.textContent = state.marketSort.dir === 'asc' ? ' ▲' : ' ▼';
+      th.classList.add('sort-active');
+    } else {
+      indicator.textContent = '';
+      th.classList.remove('sort-active');
+    }
+  });
 
   tbody.querySelectorAll(".btn-portfolio-edit").forEach(btn => {
     btn.addEventListener("click", (e) => {
@@ -1490,6 +1578,7 @@ function renderMarketWatchlist() {
     });
   });
 }
+
 
 function updateMarketIndices() {
   // Mock data if not available in API, but try to find DSEX
@@ -1932,22 +2021,48 @@ function renderHistoryView() {
     datalist.innerHTML = Object.keys(state.instruments).map(sym => `<option value="${sym}">`).join("");
   }
 
-  tbody.innerHTML = state.history.map(tx => {
+  // Build computed rows
+  let rows = state.history.map(tx => {
     const rawComm = tx.commission;
     const effectiveComm = getEffectiveCommission(rawComm);
     const rawTotal = tx.count * tx.price;
     const commissionVal = rawTotal * (effectiveComm / 100);
     const total = tx.type === 'buy' ? (rawTotal + commissionVal) : (rawTotal - commissionVal);
+    return { ...tx, effectiveComm, total };
+  });
 
-    return `
+  // Filter by search
+  if (state.historySearch) {
+    rows = rows.filter(r => r.symbol.toUpperCase().includes(state.historySearch));
+  }
+
+  // Filter by type
+  if (state.historyFilterType !== 'all') {
+    rows = rows.filter(r => r.type === state.historyFilterType);
+  }
+
+  // Sort
+  const { key, dir } = state.historySort;
+  rows.sort((a, b) => {
+    let cmp = 0;
+    if (key === 'date') cmp = new Date(a.date) - new Date(b.date);
+    else if (key === 'symbol') cmp = a.symbol.localeCompare(b.symbol);
+    else if (key === 'type') cmp = a.type.localeCompare(b.type);
+    else if (key === 'count') cmp = a.count - b.count;
+    else if (key === 'price') cmp = a.price - b.price;
+    else if (key === 'total') cmp = a.total - b.total;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  tbody.innerHTML = rows.map(tx => `
       <tr${state.editingTransactionId === tx.id ? ' class="editing-row"' : ''}>
         <td>${tx.date}</td>
         <td style="font-weight:700;">${tx.symbol}</td>
         <td><span class="type-pill ${tx.type}">${tx.type}</span></td>
         <td>${tx.count}</td>
         <td>${parseFloat(tx.price).toFixed(2)}</td>
-        <td>${effectiveComm}%</td>
-        <td style="font-weight:600;">৳ ${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+        <td>${tx.effectiveComm}%</td>
+        <td style="font-weight:600;">৳ ${tx.total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
         <td>
           <div class="history-actions">
             <button class="btn-edit-history" data-id="${tx.id}" title="Edit transaction">
@@ -1959,8 +2074,19 @@ function renderHistoryView() {
           </div>
         </td>
       </tr>
-    `;
-  }).join("");
+    `).join("");
+
+  // Sort indicators
+  document.querySelectorAll("#history-table .sortable-th").forEach(th => {
+    const indicator = th.querySelector(".sort-indicator");
+    if (th.dataset.sortKey === state.historySort.key) {
+      indicator.textContent = state.historySort.dir === 'asc' ? ' ▲' : ' ▼';
+      th.classList.add('sort-active');
+    } else {
+      indicator.textContent = '';
+      th.classList.remove('sort-active');
+    }
+  });
 
   tbody.querySelectorAll(".btn-edit-history").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1983,6 +2109,7 @@ function renderHistoryView() {
     });
   });
 }
+
 
 function getEffectiveCommission(val) {
   if (val === "" || val === null || val === undefined) return 0.4;
@@ -2145,7 +2272,7 @@ function renderMomentumView() {
 
   const combinedSymbols = [...new Set([...activeList.symbols, ...Object.keys(state.portfolio)])];
 
-  const momentumData = combinedSymbols.map(sym => {
+  let momentumData = combinedSymbols.map(sym => {
     const data = state.instruments[sym];
     if (!data) return null;
 
@@ -2165,7 +2292,22 @@ function renderMomentumView() {
     };
   }).filter(d => d !== null);
 
-  momentumData.sort((a, b) => b.ret1m - a.ret1m);
+  // Filter by search
+  if (state.momentumSearch) {
+    momentumData = momentumData.filter(r => r.symbol.includes(state.momentumSearch));
+  }
+
+  // Sort
+  const { key, dir } = state.momentumSort;
+  momentumData.sort((a, b) => {
+    let cmp = 0;
+    if (key === 'symbol') cmp = a.symbol.localeCompare(b.symbol);
+    else if (key === 'ret1m') cmp = a.ret1m - b.ret1m;
+    else if (key === 'ret3m') cmp = a.ret3m - b.ret3m;
+    else if (key === 'ret6m') cmp = a.ret6m - b.ret6m;
+    else if (key === 'ret1y') cmp = a.ret1y - b.ret1y;
+    return dir === 'asc' ? cmp : -cmp;
+  });
 
   tbody.innerHTML = momentumData.map(item => `
     <tr>
@@ -2186,7 +2328,20 @@ function renderMomentumView() {
       <td style="font-size:11px; font-weight:600;">${calculateTechnicalInsight(item.data)}</td>
     </tr>
   `).join("");
+
+  // Sort indicators
+  document.querySelectorAll("#momentum-table .sortable-th").forEach(th => {
+    const indicator = th.querySelector(".sort-indicator");
+    if (th.dataset.sortKey === state.momentumSort.key) {
+      indicator.textContent = state.momentumSort.dir === 'asc' ? ' ▲' : ' ▼';
+      th.classList.add('sort-active');
+    } else {
+      indicator.textContent = '';
+      th.classList.remove('sort-active');
+    }
+  });
 }
+
 
 function renderSignalPill(data) {
   const signal = calculateSignal(data);
