@@ -162,6 +162,15 @@
           </div>
         </div>
 
+        <div class="card" id="portfolio-pie-card" style="margin-bottom: 16px;">
+          <div class="card-header">
+            <h3>Holdings Distribution</h3>
+          </div>
+          <div id="portfolio-pie-container" style="display:flex; align-items:center; justify-content:center; gap:32px; padding:20px; flex-wrap:wrap;">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <h3>Holdings Portfolio (Calculated)</h3>
@@ -169,23 +178,44 @@
                <button class="btn-secondary" id="go-to-history-btn">Add Transaction</button>
             </div>
           </div>
+          <div class="portfolio-toolbar">
+            <div class="portfolio-search-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="portfolio-search" placeholder="Search by stock name..." autocomplete="off">
+            </div>
+            <div class="portfolio-filters">
+              <select id="portfolio-filter-pl">
+                <option value="all">All Stocks</option>
+                <option value="profit">In Profit</option>
+                <option value="loss">In Loss</option>
+              </select>
+              <select id="portfolio-filter-holding">
+                <option value="all">All Holdings</option>
+                <option value="active">Active (Shares > 0)</option>
+                <option value="closed">Closed (Shares = 0)</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-container">
           <table class="pro-table" id="portfolio-table">
             <thead>
               <tr>
-                <th>Stock Name</th>
-                <th>Current Price</th>
-                <th>Remaining Shares</th>
-                <th>Net Cash Balance</th>
-                <th>Avg. Price / Share</th>
-                <th>Unrealized P/L</th>
-                <th>Realised P/L</th>
-                <th>Total P/L</th>
+                <th class="sortable-th" data-sort-key="symbol">Stock Name <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="currentPrice">Current Price <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="remainingShares">Remaining Shares <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="netCashFlow">Net Cash Balance <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="netAvgPrice">Avg. Price / Share <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="unrealisedPL">Unrealized Profit/Loss <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="realisedPL">Realised Profit/Loss <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="totalPL">Total Profit/Loss <span class="sort-indicator"></span></th>
               </tr>
             </thead>
             <tbody id="portfolio-content">
               <!-- Populated via JS -->
             </tbody>
           </table>
+          </div>
+          <div id="portfolio-no-results" class="empty-container" style="display:none;">No matching holdings found.</div>
         </div>
       </section>
 
@@ -194,7 +224,7 @@
         <div class="history-layout">
           <div class="card history-form-card">
             <div class="card-header">
-              <h3>Add New Transaction</h3>
+              <h3 id="history-form-title">Add New Transaction</h3>
             </div>
             <div class="card-body">
               <form id="history-form" class="transaction-form">
@@ -232,7 +262,10 @@
                     <input type="number" id="hist-commission" step="0.01" value="0.4">
                   </div>
                 </div>
-                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">Add to History</button>
+                <div class="form-buttons">
+                  <button type="submit" class="btn-primary" style="flex:1;">Add to History</button>
+                  <button type="button" class="btn-secondary btn-cancel-edit" id="cancel-edit-btn" style="display:none;">Cancel</button>
+                </div>
               </form>
             </div>
           </div>
@@ -370,7 +403,75 @@
       <button id="drawer-close-btn" class="btn-icon">✕</button>
     </div>
     <div class="drawer-grid" id="drawer-stats-grid">
-      <!-- Standard stats here -->
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Close Price</span>
+        <span id="stat-close" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item" style="grid-column: span 2;">
+        <span class="drawer-grid-label">Price Change</span>
+        <span id="stat-change" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Open</span>
+        <span id="stat-open" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">High</span>
+        <span id="stat-high" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Low</span>
+        <span id="stat-low" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">YCP</span>
+        <span id="stat-ycp" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Volume</span>
+        <span id="stat-volume" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Value (Tk)</span>
+        <span id="stat-value" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Category</span>
+        <span id="stat-category" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item">
+        <span class="drawer-grid-label">Sector ID</span>
+        <span id="stat-sector" class="drawer-grid-value">—</span>
+      </div>
+      <div class="drawer-grid-item" style="grid-column: span 2;">
+        <span class="drawer-grid-label">Last Updated</span>
+        <span id="stat-updated" class="drawer-grid-value" style="font-size: 11px; white-space: nowrap;">—</span>
+      </div>
+    </div>
+
+    <!-- Alert Configuration Section -->
+    <div class="drawer-alert-section">
+      <div class="drawer-alert-header">
+        <h4 class="drawer-alert-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Price Alerts
+        </h4>
+      </div>
+      <div id="drawer-alerts-list" class="drawer-alerts-list">
+        <!-- Populated via JS -->
+      </div>
+      <div class="drawer-alert-form">
+        <select id="drawer-alert-condition" class="drawer-alert-select">
+          <option value="above">Above</option>
+          <option value="below">Below</option>
+        </select>
+        <input type="number" id="drawer-alert-value" class="drawer-alert-input" placeholder="Target price" step="0.01">
+        <button id="drawer-add-alert-btn" class="btn-primary drawer-alert-add-btn">+ Alert</button>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      Data provided by StockNow Bangladesh
     </div>
   </div>
 

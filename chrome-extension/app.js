@@ -7,9 +7,14 @@ let state = {
   showCharts: true, // Default to true
   portfolio: {},   // Symbol-keyed: {symbol, buyPrice, quantity}
   history: [],     // Array of transactions: {id, date, symbol, type, count, price, commission}
+  editingTransactionId: null, // ID of transaction currently being edited (null = add mode)
   currentView: 'market', // For dashboard: market, portfolio, momentum, history
   chartLayout: 'list',   // Default to list (one per row)
-  isDashboard: document.body.classList.contains('dashboard-body')
+  isDashboard: document.body.classList.contains('dashboard-body'),
+  portfolioSort: { key: 'symbol', dir: 'asc' }, // Current sort for portfolio table
+  portfolioSearch: '',      // Search filter text
+  portfolioFilterPL: 'all', // 'all' | 'profit' | 'loss'
+  portfolioFilterHolding: 'all' // 'all' | 'active' | 'closed'
 };
 
 // Initialize the Application
@@ -264,6 +269,38 @@ function setupEventListeners() {
 
     document.getElementById("go-to-history-btn")?.addEventListener("click", () => {
        switchDashboardView('history');
+    });
+
+    // Portfolio search
+    document.getElementById("portfolio-search")?.addEventListener("input", (e) => {
+      state.portfolioSearch = e.target.value.trim().toUpperCase();
+      renderPortfolioView();
+    });
+
+    // Portfolio P/L filter
+    document.getElementById("portfolio-filter-pl")?.addEventListener("change", (e) => {
+      state.portfolioFilterPL = e.target.value;
+      renderPortfolioView();
+    });
+
+    // Portfolio holding filter
+    document.getElementById("portfolio-filter-holding")?.addEventListener("change", (e) => {
+      state.portfolioFilterHolding = e.target.value;
+      renderPortfolioView();
+    });
+
+    // Portfolio sortable column headers
+    document.querySelectorAll("#portfolio-table .sortable-th").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.sortKey;
+        if (state.portfolioSort.key === key) {
+          state.portfolioSort.dir = state.portfolioSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.portfolioSort.key = key;
+          state.portfolioSort.dir = key === 'symbol' ? 'asc' : 'desc'; // default desc for numbers, asc for name
+        }
+        renderPortfolioView();
+      });
     });
 
     document.getElementById("history-form")?.addEventListener("submit", async (e) => {
@@ -903,7 +940,91 @@ function showStockDetails(symbol, data) {
   document.getElementById("stat-sector").innerText = data.sector_id || "N/A";
   document.getElementById("stat-updated").innerText = data.updated_at || "N/A";
 
+  // Store current drawer symbol for alert operations
+  state.drawerSymbol = symbol;
+
+  // Render alerts for this stock
+  renderDrawerAlerts(symbol);
+
+  // Setup add alert button (remove old listener by replacing element)
+  const addBtn = document.getElementById("drawer-add-alert-btn");
+  if (addBtn) {
+    const newBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newBtn, addBtn);
+    newBtn.addEventListener("click", async () => {
+      const condition = document.getElementById("drawer-alert-condition")?.value;
+      const value = parseFloat(document.getElementById("drawer-alert-value")?.value);
+      
+      if (isNaN(value) || value <= 0) {
+        alert("Please enter a valid target price.");
+        return;
+      }
+
+      const { alerts } = await chrome.storage.local.get("alerts");
+      const activeAlerts = alerts || [];
+      
+      activeAlerts.push({
+        symbol: state.drawerSymbol,
+        condition,
+        value,
+        triggered: false
+      });
+
+      await chrome.storage.local.set({ alerts: activeAlerts });
+      
+      // Clear input
+      const valInput = document.getElementById("drawer-alert-value");
+      if (valInput) valInput.value = "";
+      
+      renderDrawerAlerts(state.drawerSymbol);
+    });
+  }
+
   drawer.classList.add("active");
+}
+
+async function renderDrawerAlerts(symbol) {
+  const container = document.getElementById("drawer-alerts-list");
+  if (!container) return;
+
+  const { alerts } = await chrome.storage.local.get("alerts");
+  const stockAlerts = (alerts || [])
+    .map((a, idx) => ({ ...a, _idx: idx }))
+    .filter(a => a.symbol === symbol);
+
+  if (stockAlerts.length === 0) {
+    container.innerHTML = `<div class="drawer-alert-empty">No alerts set for this stock</div>`;
+    return;
+  }
+
+  container.innerHTML = stockAlerts.map(a => {
+    const dotClass = a.triggered ? 'triggered' : 'armed';
+    const statusText = a.triggered ? 'Triggered' : 'Armed';
+    return `
+      <div class="drawer-alert-item">
+        <div class="drawer-alert-item-info">
+          <span class="drawer-alert-dot ${dotClass}"></span>
+          <span class="drawer-alert-condition">${a.condition === 'above' ? '↑ Above' : '↓ Below'} ৳${a.value.toFixed(2)}</span>
+          <span class="drawer-alert-status">${statusText}</span>
+        </div>
+        <button class="drawer-alert-delete-btn" data-index="${a._idx}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll(".drawer-alert-delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx = parseInt(btn.dataset.index);
+      const { alerts } = await chrome.storage.local.get("alerts");
+      if (alerts && alerts[idx] !== undefined) {
+        alerts.splice(idx, 1);
+        await chrome.storage.local.set({ alerts });
+        renderDrawerAlerts(symbol);
+      }
+    });
+  });
 }
 
 // Load and display settings modal data
@@ -1379,11 +1500,14 @@ function renderPortfolioView() {
   const tbody = document.getElementById("portfolio-content");
   if (!tbody) return;
 
-  // Pivot Table Logic: Aggregate history into holdings
+  // ── Step 1: Aggregate history into holdings ──
   const holdings = {};
-  let totalCashFlow = 0; // Net cash from buys (-) and sells (+)
+  let totalCashFlow = 0;
 
-  state.history.forEach(tx => {
+  // Sort chronologically (oldest first) for correct cost-basis tracking
+  const sortedHistory = [...state.history].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  sortedHistory.forEach(tx => {
     const symbol = tx.symbol;
     if (!holdings[symbol]) {
       holdings[symbol] = {
@@ -1391,7 +1515,7 @@ function renderPortfolioView() {
         totalCashInvested: 0,
         remainingShares: 0,
         realisedPL: 0,
-        netCashFlow: 0, // Individual stock cash flow
+        netCashFlow: 0,
         txCount: 0
       };
     }
@@ -1411,73 +1535,265 @@ function renderPortfolioView() {
       totalCashFlow -= spent;
     } else {
       const earned = rawTotal - commission;
-      holdings[symbol].remainingShares -= txCount;
-      holdings[symbol].netCashFlow += earned;
-      totalCashFlow += earned;
-      
-      // Calculate Realised P/L for this sell
-      // Pro-rata cost of shares sold
+
+      // Calculate Realised P/L for this sell using weighted-average cost
       const avgCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalCashInvested / holdings[symbol].totalSharesBought) : 0;
       const costOfSoldShares = txCount * avgCostPerShare;
       holdings[symbol].realisedPL += (earned - costOfSoldShares);
+
+      // Remove sold shares from cost basis pool so future
+      // buys don't get diluted by already-sold lots
+      holdings[symbol].totalSharesBought -= txCount;
+      holdings[symbol].totalCashInvested -= costOfSoldShares;
+
+      holdings[symbol].remainingShares -= txCount;
+      holdings[symbol].netCashFlow += earned;
+      totalCashFlow += earned;
     }
   });
 
-  const symbols = Object.keys(holdings).filter(s => holdings[s].remainingShares !== 0 || holdings[s].netCashFlow !== 0);
-  
-  let totalPortfolioValue = 0;
-  let totalRealisedPL = 0;
-  let totalUnrealisedPL = 0;
+  // ── Step 2: Build data rows with computed values ──
+  const allSymbols = Object.keys(holdings).filter(s => holdings[s].remainingShares !== 0 || holdings[s].netCashFlow !== 0);
 
-  tbody.innerHTML = symbols.map(symbol => {
+  let rows = allSymbols.map(symbol => {
     const h = holdings[symbol];
     const data = state.instruments[symbol];
     const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
-    
-    // Net Avg Price (break-even) = net money spent / remaining shares
-    // netCashFlow is negative for net spending, so -netCashFlow = money still invested
-    const netMoneyInvested = -h.netCashFlow; // positive = you've spent more than earned
+
+    const netMoneyInvested = -h.netCashFlow;
     const netAvgPrice = h.remainingShares > 0 ? Math.max(0, netMoneyInvested / h.remainingShares) : 0;
-    
     const remainingValue = h.remainingShares * currentPrice;
-    
-    // Original avg cost for unrealised P/L (avoids double-counting with realised P/L)
+
     const origAvgCost = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
     const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * origAvgCost)) : 0;
     const totalPL = h.realisedPL + unrealisedPL;
+
+    return {
+      symbol,
+      currentPrice,
+      remainingShares: h.remainingShares,
+      netCashFlow: h.netCashFlow,
+      netAvgPrice,
+      unrealisedPL,
+      realisedPL: h.realisedPL,
+      totalPL,
+      remainingValue
+    };
+  });
+
+  // ── Step 3: Apply search filter ──
+  if (state.portfolioSearch) {
+    rows = rows.filter(r => r.symbol.includes(state.portfolioSearch));
+  }
+
+  // ── Step 4: Apply P/L filter ──
+  if (state.portfolioFilterPL === 'profit') {
+    rows = rows.filter(r => r.totalPL > 0);
+  } else if (state.portfolioFilterPL === 'loss') {
+    rows = rows.filter(r => r.totalPL < 0);
+  }
+
+  // ── Step 5: Apply holding filter ──
+  if (state.portfolioFilterHolding === 'active') {
+    rows = rows.filter(r => r.remainingShares > 0);
+  } else if (state.portfolioFilterHolding === 'closed') {
+    rows = rows.filter(r => r.remainingShares === 0);
+  }
+
+  // ── Step 6: Apply sort ──
+  const { key: sortKey, dir: sortDir } = state.portfolioSort;
+  rows.sort((a, b) => {
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+    if (typeof valA === 'string') {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+      return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    }
+    return sortDir === 'asc' ? valA - valB : valB - valA;
+  });
+
+  // ── Step 7: Update sort indicators in header ──
+  document.querySelectorAll("#portfolio-table .sortable-th").forEach(th => {
+    const indicator = th.querySelector(".sort-indicator");
+    if (!indicator) return;
+    if (th.dataset.sortKey === sortKey) {
+      indicator.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
+      th.classList.add('sort-active');
+    } else {
+      indicator.textContent = '';
+      th.classList.remove('sort-active');
+    }
+  });
+
+  // ── Step 8: Compute totals (from ALL unfiltered data for summary cards) ──
+  let totalPortfolioValue = 0;
+  let totalRealisedPL = 0;
+  let totalUnrealisedPL = 0;
+  const pieData = [];
+
+  // Use allSymbols for summary cards (unfiltered)
+  allSymbols.forEach(symbol => {
+    const h = holdings[symbol];
+    const data = state.instruments[symbol];
+    const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
+    const remainingValue = h.remainingShares * currentPrice;
+    const origAvgCost = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
+    const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * origAvgCost)) : 0;
 
     totalPortfolioValue += remainingValue;
     totalRealisedPL += h.realisedPL;
     totalUnrealisedPL += unrealisedPL;
 
-    return `
-      <tr>
-        <td style="font-weight:700;">${symbol}</td>
-        <td>${currentPrice > 0 ? currentPrice.toFixed(2) : '—'}</td>
-        <td>${h.remainingShares}</td>
-        <td>৳ ${h.netCashFlow.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td>${netAvgPrice.toFixed(2)}</td>
-        <td class="${unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td class="${h.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${h.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td class="${totalPL >= 0 ? 'positive' : 'negative'}" style="font-weight:700;">৳ ${totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-      </tr>
-    `;
-  }).join("");
+    if (h.remainingShares > 0 && remainingValue > 0) {
+      pieData.push({ symbol, value: remainingValue, shares: h.remainingShares });
+    }
+  });
 
+  // ── Step 9: Render table rows ──
+  const noResults = document.getElementById("portfolio-no-results");
+  const tableEl = document.getElementById("portfolio-table");
+
+  if (rows.length === 0 && allSymbols.length > 0) {
+    // Have data but filters hid everything
+    if (noResults) noResults.style.display = '';
+    if (tableEl) tableEl.style.display = 'none';
+    tbody.innerHTML = '';
+  } else {
+    if (noResults) noResults.style.display = 'none';
+    if (tableEl) tableEl.style.display = '';
+
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td style="font-weight:700;">${r.symbol}</td>
+        <td>${r.currentPrice > 0 ? r.currentPrice.toFixed(2) : '—'}</td>
+        <td>${r.remainingShares}</td>
+        <td>৳ ${r.netCashFlow.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td>${r.netAvgPrice.toFixed(2)}</td>
+        <td class="${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td class="${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td class="${r.totalPL >= 0 ? 'positive' : 'negative'}" style="font-weight:700;">৳ ${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+      </tr>
+    `).join("");
+  }
+
+  // ── Step 10: Update summary cards ──
   const totalPL = totalRealisedPL + totalUnrealisedPL;
-  const totalInvestment = totalPortfolioValue - totalUnrealisedPL; // Not perfect but a proxy
+  const totalInvestment = totalPortfolioValue - totalUnrealisedPL;
   const totalPLPct = totalInvestment > 0 ? (totalPL / Math.abs(totalInvestment)) * 100 : 0;
 
   document.getElementById("portfolio-total-value").innerText = `৳ ${totalPortfolioValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
   document.getElementById("portfolio-cash-balance").innerText = `৳ ${totalCashFlow.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-  
+
   const plEl = document.getElementById("portfolio-total-pl");
-  plEl.innerText = `৳ ${totalPL.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-  plEl.className = `stat-value ${totalPL >= 0 ? 'positive' : 'negative'}`;
+  if (plEl) {
+    plEl.innerText = `৳ ${totalPL.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    plEl.className = `stat-value ${totalPL >= 0 ? 'positive' : 'negative'}`;
+  }
 
   const plPctEl = document.getElementById("portfolio-total-pl-percent");
-  plPctEl.innerText = `${totalPL >= 0 ? '+' : ''}${totalPLPct.toFixed(2)}%`;
-  plPctEl.className = `stat-change ${totalPL >= 0 ? 'positive' : 'negative'}`;
+  if (plPctEl) {
+    plPctEl.innerText = `${totalPL >= 0 ? '+' : ''}${totalPLPct.toFixed(2)}%`;
+    plPctEl.className = `stat-change ${totalPL >= 0 ? 'positive' : 'negative'}`;
+  }
+
+  // Render Pie Chart
+  renderPortfolioPieChart(pieData, totalPortfolioValue);
+}
+
+function renderPortfolioPieChart(data, totalValue) {
+  const container = document.getElementById("portfolio-pie-container");
+  const card = document.getElementById("portfolio-pie-card");
+  if (!container || !card) return;
+
+  if (data.length === 0) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "";
+
+  const COLORS = [
+    '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6',
+    '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4',
+    '#84cc16', '#e11d48', '#7c3aed', '#0ea5e9', '#d946ef'
+  ];
+
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerR = 90;
+  const innerR = 55; // donut hole
+
+  let cumAngle = -Math.PI / 2; // start from top
+  const paths = [];
+
+  data.forEach((item, i) => {
+    const pct = item.value / totalValue;
+    const angle = pct * 2 * Math.PI;
+
+    if (data.length === 1) {
+      // Full circle for single holding
+      paths.push(`<circle cx="${cx}" cy="${cy}" r="${outerR}" fill="${COLORS[i % COLORS.length]}" />`);
+      paths.push(`<circle cx="${cx}" cy="${cy}" r="${innerR}" fill="var(--bg-card)" />`);
+    } else {
+      const x1o = cx + outerR * Math.cos(cumAngle);
+      const y1o = cy + outerR * Math.sin(cumAngle);
+      const x1i = cx + innerR * Math.cos(cumAngle);
+      const y1i = cy + innerR * Math.sin(cumAngle);
+
+      const x2o = cx + outerR * Math.cos(cumAngle + angle);
+      const y2o = cy + outerR * Math.sin(cumAngle + angle);
+      const x2i = cx + innerR * Math.cos(cumAngle + angle);
+      const y2i = cy + innerR * Math.sin(cumAngle + angle);
+
+      const largeArc = angle > Math.PI ? 1 : 0;
+
+      const d = [
+        `M ${x1o} ${y1o}`,
+        `A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2o} ${y2o}`,
+        `L ${x2i} ${y2i}`,
+        `A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1i} ${y1i}`,
+        `Z`
+      ].join(' ');
+
+      paths.push(`<path d="${d}" fill="${COLORS[i % COLORS.length]}" stroke="var(--bg-card)" stroke-width="1.5" />`);
+    }
+
+    cumAngle += angle;
+  });
+
+  // Center text
+  const centerText = `
+    <text x="${cx}" y="${cy - 6}" text-anchor="middle" fill="var(--text-primary)" font-size="14" font-weight="700">
+      ৳${totalValue >= 1000 ? (totalValue / 1000).toFixed(0) + 'K' : totalValue.toFixed(0)}
+    </text>
+    <text x="${cx}" y="${cx + 12}" text-anchor="middle" fill="var(--text-muted)" font-size="10">
+      ${data.length} stock${data.length > 1 ? 's' : ''}
+    </text>
+  `;
+
+  const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths.join('')}${centerText}</svg>`;
+
+  // Legend
+  const legend = data
+    .sort((a, b) => b.value - a.value)
+    .map((item, i) => {
+      const pct = ((item.value / totalValue) * 100).toFixed(1);
+      const color = COLORS[data.indexOf(item) % COLORS.length];
+      return `
+        <div class="pie-legend-item">
+          <span class="pie-legend-dot" style="background:${color};"></span>
+          <span class="pie-legend-symbol">${item.symbol}</span>
+          <span class="pie-legend-shares">${item.shares} shares</span>
+          <span class="pie-legend-pct">${pct}%</span>
+        </div>
+      `;
+    }).join('');
+
+  container.innerHTML = `
+    <div class="pie-chart-wrap">${svg}</div>
+    <div class="pie-legend-wrap">${legend}</div>
+  `;
 }
 
 async function addTransactionFromForm() {
@@ -1493,27 +1809,95 @@ async function addTransactionFromForm() {
     return;
   }
 
-  const transaction = {
-    id: Date.now(),
-    date,
-    symbol,
-    type,
-    count,
-    price,
-    commission: document.getElementById("hist-commission").value
-  };
+  if (state.editingTransactionId !== null) {
+    // Edit mode: update existing transaction
+    const idx = state.history.findIndex(tx => tx.id === state.editingTransactionId);
+    if (idx !== -1) {
+      state.history[idx] = {
+        id: state.editingTransactionId,
+        date,
+        symbol,
+        type,
+        count,
+        price,
+        commission: document.getElementById("hist-commission").value
+      };
+    }
+    state.editingTransactionId = null;
+  } else {
+    // Add mode: create new transaction
+    const transaction = {
+      id: Date.now(),
+      date,
+      symbol,
+      type,
+      count,
+      price,
+      commission: document.getElementById("hist-commission").value
+    };
+    state.history.push(transaction);
+  }
 
-  state.history.push(transaction);
   state.history.sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date desc
 
   await saveWatchlistsToStorage();
   
-  // Clear inputs
+  // Clear inputs & reset form state
   document.getElementById("hist-symbol").value = "";
   document.getElementById("hist-count").value = "";
   document.getElementById("hist-price").value = "";
   
   renderDashboardUI();
+}
+
+function editTransaction(id) {
+  const tx = state.history.find(tx => tx.id === id);
+  if (!tx) return;
+
+  state.editingTransactionId = id;
+
+  // Populate form fields with the transaction data
+  document.getElementById("hist-date").value = tx.date;
+  document.getElementById("hist-symbol").value = tx.symbol;
+  document.getElementById("hist-type").value = tx.type;
+  document.getElementById("hist-count").value = tx.count;
+  document.getElementById("hist-price").value = tx.price;
+  document.getElementById("hist-commission").value = tx.commission !== undefined && tx.commission !== null ? tx.commission : "0.4";
+
+  // Update form UI to edit mode
+  const formTitle = document.getElementById("history-form-title");
+  if (formTitle) formTitle.textContent = "Edit Transaction";
+
+  const submitBtn = document.querySelector("#history-form button[type='submit']");
+  if (submitBtn) submitBtn.textContent = "Update Transaction";
+
+  const cancelBtn = document.getElementById("cancel-edit-btn");
+  if (cancelBtn) cancelBtn.style.display = "inline-flex";
+
+  // Scroll the form into view
+  document.querySelector(".history-form-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cancelEditTransaction() {
+  state.editingTransactionId = null;
+
+  // Clear form inputs
+  document.getElementById("hist-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("hist-symbol").value = "";
+  document.getElementById("hist-type").value = "buy";
+  document.getElementById("hist-count").value = "";
+  document.getElementById("hist-price").value = "";
+  document.getElementById("hist-commission").value = "0.4";
+
+  // Restore form UI to add mode
+  const formTitle = document.getElementById("history-form-title");
+  if (formTitle) formTitle.textContent = "Add New Transaction";
+
+  const submitBtn = document.querySelector("#history-form button[type='submit']");
+  if (submitBtn) submitBtn.textContent = "Add to History";
+
+  const cancelBtn = document.getElementById("cancel-edit-btn");
+  if (cancelBtn) cancelBtn.style.display = "none";
 }
 
 function renderHistoryView() {
@@ -1534,7 +1918,7 @@ function renderHistoryView() {
     const total = tx.type === 'buy' ? (rawTotal + commissionVal) : (rawTotal - commissionVal);
 
     return `
-      <tr>
+      <tr${state.editingTransactionId === tx.id ? ' class="editing-row"' : ''}>
         <td>${tx.date}</td>
         <td style="font-weight:700;">${tx.symbol}</td>
         <td><span class="type-pill ${tx.type}">${tx.type}</span></td>
@@ -1543,21 +1927,44 @@ function renderHistoryView() {
         <td>${effectiveComm}%</td>
         <td style="font-weight:600;">৳ ${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
         <td>
-          <button class="btn-delete-history" data-id="${tx.id}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
-          </button>
+          <div class="history-actions">
+            <button class="btn-edit-history" data-id="${tx.id}" title="Edit transaction">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="btn-delete-history" data-id="${tx.id}" title="Delete transaction">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join("");
 
+  tbody.querySelectorAll(".btn-edit-history").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = parseInt(btn.dataset.id);
+      editTransaction(id);
+      renderHistoryView(); // Re-render to highlight the editing row
+    });
+  });
+
   tbody.querySelectorAll(".btn-delete-history").forEach(btn => {
     btn.addEventListener("click", async () => {
       const id = parseInt(btn.dataset.id);
+      // If deleting the transaction being edited, cancel edit mode
+      if (state.editingTransactionId === id) {
+        cancelEditTransaction();
+      }
       state.history = state.history.filter(tx => tx.id !== id);
       await saveWatchlistsToStorage();
       renderHistoryView();
     });
+  });
+
+  // Cancel edit button listener
+  document.getElementById("cancel-edit-btn")?.addEventListener("click", () => {
+    cancelEditTransaction();
+    renderHistoryView();
   });
 }
 

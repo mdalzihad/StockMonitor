@@ -863,6 +863,110 @@ header {
   overflow-y: auto;
 }
 
+/* Portfolio Toolbar */
+.portfolio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.portfolio-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 180px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 7px 12px;
+  transition: var(--transition-smooth);
+}
+
+.portfolio-search-wrap:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--border-glow);
+}
+
+.portfolio-search-wrap svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.portfolio-search-wrap input {
+  border: none;
+  outline: none;
+  background: none;
+  font-family: var(--font-main);
+  font-size: 13px;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.portfolio-search-wrap input::placeholder {
+  color: var(--text-muted);
+}
+
+.portfolio-filters {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.portfolio-filters select {
+  padding: 7px 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.portfolio-filters select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--border-glow);
+}
+
+.portfolio-filters select:hover {
+  border-color: var(--text-muted);
+}
+
+/* Sortable Table Headers */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.sortable-th:hover {
+  color: var(--primary);
+}
+
+.sortable-th.sort-active {
+  color: var(--primary);
+}
+
+.sort-indicator {
+  font-size: 9px;
+  vertical-align: middle;
+  opacity: 0.9;
+}
+
 .btn-delete-history {
   color: var(--red);
   background: none;
@@ -875,6 +979,45 @@ header {
 
 .btn-delete-history:hover {
   background: var(--red-bg);
+}
+
+.btn-edit-history {
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.btn-edit-history:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.history-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.editing-row {
+  background: rgba(99, 102, 241, 0.08) !important;
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+  border-radius: 4px;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-cancel-edit {
+  padding: 8px 16px;
+  align-items: center;
+  justify-content: center;
 }
 
 .type-pill {
@@ -1208,6 +1351,177 @@ header {
   text-align: center;
   font-size: 10px;
   color: var(--text-muted);
+}
+
+/* Drawer Alert Configuration */
+.drawer-alert-section {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.drawer-alert-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.drawer-alert-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.drawer-alerts-list {
+  margin-bottom: 10px;
+}
+
+.drawer-alert-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: var(--bg-card-hover);
+  font-size: 12px;
+}
+
+.drawer-alert-item-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drawer-alert-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.drawer-alert-dot.armed {
+  background: #f59e0b;
+}
+
+.drawer-alert-dot.triggered {
+  background: var(--green);
+}
+
+.drawer-alert-condition {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.drawer-alert-status {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.drawer-alert-delete-btn {
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.drawer-alert-delete-btn:hover {
+  opacity: 1;
+}
+
+.drawer-alert-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.drawer-alert-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.drawer-alert-select,
+.drawer-alert-input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-main);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.drawer-alert-select:focus,
+.drawer-alert-input:focus {
+  border-color: var(--primary);
+}
+
+.drawer-alert-select {
+  flex-shrink: 0;
+}
+
+.drawer-alert-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-alert-add-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Pie Chart */
+.pie-chart-wrap {
+  flex-shrink: 0;
+}
+
+.pie-legend-wrap {
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.pie-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.pie-legend-symbol {
+  font-weight: 600;
+  min-width: 80px;
+  color: var(--text-primary);
+}
+
+.pie-legend-shares {
+  color: var(--text-muted);
+}
+
+.pie-legend-pct {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* Settings & Alerts Modal Styles */
