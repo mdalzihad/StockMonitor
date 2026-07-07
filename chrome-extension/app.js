@@ -3,6 +3,7 @@ let state = {
   instruments: {}, // Dict of symbols from API
   watchlists: [],  // Array of watchlists: [{id, name, symbols: []}]
   activeId: '',    // Current active watchlist ID
+  defaultWatchlistId: '', // ID of the default watchlist (auto-selected on load)
   isLoading: false,
   showCharts: true, // Default to true
   portfolio: {},   // Symbol-keyed: {symbol, buyPrice, quantity}
@@ -81,7 +82,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Load Watchlists & Active Selection from chrome.storage.local
 async function loadStateFromStorage() {
-  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "showCharts", "portfolio", "transactionHistory"]);
+  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "defaultWatchlistId", "showCharts", "portfolio", "transactionHistory"]);
   
   if (data.showCharts !== undefined) {
     state.showCharts = data.showCharts;
@@ -97,7 +98,17 @@ async function loadStateFromStorage() {
 
   if (data.watchlists && data.watchlists.length > 0) {
     state.watchlists = data.watchlists;
-    state.activeId = data.activeWatchlistId || data.watchlists[0].id;
+    // On load, prefer the default watchlist, then the last active, then the first
+    const defaultId = data.defaultWatchlistId;
+    const lastActiveId = data.activeWatchlistId;
+    if (defaultId && state.watchlists.find(l => l.id === defaultId)) {
+      state.activeId = defaultId;
+    } else if (lastActiveId && state.watchlists.find(l => l.id === lastActiveId)) {
+      state.activeId = lastActiveId;
+    } else {
+      state.activeId = state.watchlists[0].id;
+    }
+    state.defaultWatchlistId = defaultId || state.watchlists[0].id;
   } else {
     // Default initial watchlist
     const defaultList = {
@@ -107,6 +118,7 @@ async function loadStateFromStorage() {
     };
     state.watchlists = [defaultList];
     state.activeId = defaultList.id;
+    state.defaultWatchlistId = defaultList.id;
     await saveWatchlistsToStorage();
   }
 }
@@ -116,6 +128,7 @@ async function saveWatchlistsToStorage() {
   await chrome.storage.local.set({
     watchlists: state.watchlists,
     activeWatchlistId: state.activeId,
+    defaultWatchlistId: state.defaultWatchlistId || state.activeId,
     portfolio: state.portfolio,
     transactionHistory: state.history
   });
@@ -771,7 +784,8 @@ function renderWatchlistSelector() {
   if (!select) return;
 
   select.innerHTML = state.watchlists.map(list => {
-    return `<option value="${list.id}" ${list.id === state.activeId ? 'selected' : ''}>${list.name}</option>`;
+    const isDefault = list.id === state.defaultWatchlistId;
+    return `<option value="${list.id}" ${list.id === state.activeId ? 'selected' : ''}>${isDefault ? '★ ' : ''}${list.name}</option>`;
   }).join("");
 }
 
@@ -782,17 +796,39 @@ function renderModalWatchlists() {
 
   container.innerHTML = state.watchlists.map(list => {
     const canDelete = state.watchlists.length > 1;
+    const isDefault = list.id === state.defaultWatchlistId;
     return `
       <div class="management-list-item">
-        <span>${list.name} (${list.symbols.length} stocks)</span>
-        ${canDelete ? `
-          <button class="btn-delete-list" data-id="${list.id}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
-          </button>
-        ` : ''}
+        <span>${isDefault ? '★ ' : ''}${list.name} (${list.symbols.length} stocks)${isDefault ? ' — Default' : ''}</span>
+        <div style="display:flex; gap:4px; align-items:center;">
+          ${!isDefault ? `
+            <button class="btn-set-default" data-id="${list.id}" title="Set as default" style="border:none; background:none; cursor:pointer; color:var(--text-muted); padding:4px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </button>
+          ` : `
+            <span style="color:var(--primary); padding:4px;" title="Default watchlist">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </span>
+          `}
+          ${canDelete ? `
+            <button class="btn-delete-list" data-id="${list.id}" title="Delete watchlist">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
+            </button>
+          ` : ''}
+        </div>
       </div>
     `;
   }).join("");
+
+  // Set default listeners
+  container.querySelectorAll(".btn-set-default").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      state.defaultWatchlistId = btn.dataset.id;
+      await saveWatchlistsToStorage();
+      renderModalWatchlists();
+      renderUI();
+    });
+  });
 
   // Add delete listeners
   container.querySelectorAll(".btn-delete-list").forEach(btn => {
@@ -801,6 +837,10 @@ function renderModalWatchlists() {
       state.watchlists = state.watchlists.filter(l => l.id !== id);
       if (state.activeId === id) {
         state.activeId = state.watchlists[0].id;
+      }
+      // If deleting the default, reassign
+      if (state.defaultWatchlistId === id) {
+        state.defaultWatchlistId = state.watchlists[0].id;
       }
       await saveWatchlistsToStorage();
       renderModalWatchlists();
@@ -1454,10 +1494,11 @@ function renderSidebarWatchlists() {
   if (!container) return;
 
   container.innerHTML = state.watchlists.map(list => {
+    const isDefault = list.id === state.defaultWatchlistId;
     return `
       <button class="nav-item ${list.id === state.activeId ? 'active' : ''}" data-id="${list.id}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        ${list.name}
+        ${list.name}${isDefault ? ' <span style="color:var(--primary); font-size:11px;" title="Default">★</span>' : ''}
       </button>
     `;
   }).join("");
