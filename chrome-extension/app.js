@@ -2037,7 +2037,7 @@ function showAvgPriceBreakdown(symbol) {
   // Build modal HTML
   const modalHTML = `
     <div id="avg-price-modal" class="modal active" style="z-index:1000;">
-      <div class="modal-content" style="max-width:750px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+      <div class="modal-content" style="max-width:1100px; width:95vw; max-height:90vh; overflow:hidden; display:flex; flex-direction:column;">
         <div class="modal-header">
           <div>
             <h3 style="margin:0;">Effective Avg Price — ${symbol}</h3>
