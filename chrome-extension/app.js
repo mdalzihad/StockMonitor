@@ -543,6 +543,13 @@ function setupEventListeners() {
     renderUI();
   });
 
+  // Sidebar quick-create button (dashboard) — opens modal with focus on name input
+  document.getElementById("sidebar-add-watchlist-btn")?.addEventListener("click", () => {
+    renderModalWatchlists();
+    modal?.classList.add("active");
+    setTimeout(() => newListNameInput?.focus(), 100);
+  });
+
   // Detail Drawer Close Elements
   document.getElementById("drawer-close-btn")?.addEventListener("click", () => {
     document.getElementById("detail-drawer")?.classList.remove("active");
@@ -1587,18 +1594,31 @@ function renderSidebarWatchlists() {
   container.innerHTML = state.watchlists.map(list => {
     const isDefault = list.id === state.defaultWatchlistId;
     return `
-      <button class="nav-item ${list.id === state.activeId ? 'active' : ''}" data-id="${list.id}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        ${list.name}${isDefault ? ' <span style="color:var(--primary); font-size:11px;" title="Default">★</span>' : ''}
+      <button class="nav-item ${list.id === state.activeId ? 'active' : ''}" data-id="${list.id}" title="Right-click to set as default">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="${isDefault ? 'var(--primary)' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span style="flex:1; text-align:left;">${list.name}</span>
+        <span style="font-size:10px; color:var(--text-muted); min-width:16px; text-align:right;">${list.symbols.length}</span>
       </button>
     `;
   }).join("");
 
   container.querySelectorAll(".nav-item").forEach(btn => {
+    // Left click: switch to this watchlist
     btn.addEventListener("click", async () => {
       state.activeId = btn.dataset.id;
       await saveWatchlistsToStorage();
       renderDashboardUI();
+    });
+
+    // Right click: set as default
+    btn.addEventListener("contextmenu", async (e) => {
+      e.preventDefault();
+      const id = btn.dataset.id;
+      if (state.defaultWatchlistId !== id) {
+        state.defaultWatchlistId = id;
+        await saveWatchlistsToStorage();
+        renderSidebarWatchlists();
+      }
     });
   });
 }

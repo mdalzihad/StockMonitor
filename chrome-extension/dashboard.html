@@ -47,7 +47,17 @@
         </div>
 
         <div class="nav-section">
-          <span class="nav-label">Your Watchlists</span>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="nav-label">Your Watchlists</span>
+            <div style="display:flex; gap:4px;">
+              <button id="sidebar-add-watchlist-btn" class="btn-icon" title="New watchlist" style="border:none; width:22px; height:22px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--primary-glow); color:var(--primary);">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button id="manage-watchlists-btn" class="btn-icon" title="Manage watchlists" style="border:none; width:22px; height:22px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--bg-card); color:var(--text-muted);">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+              </button>
+            </div>
+          </div>
           <div id="sidebar-watchlists" class="sidebar-watchlist-list">
             <!-- Populated via JS -->
           </div>
@@ -499,6 +509,32 @@
 
     <div class="drawer-footer">
       Data provided by StockNow Bangladesh
+    </div>
+  </div>
+
+  <!-- Watchlist Management Modal -->
+  <div id="watchlist-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Manage Watchlists</h3>
+        <button id="modal-close-btn" class="btn-icon" style="border:none; width:20px; height:20px;">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group">
+          <span class="input-label">Your watchlists</span>
+          <div id="watchlist-management-list" class="watchlist-management-list">
+            <!-- Rendered dynamically in app.js -->
+          </div>
+        </div>
+        <div class="input-group" style="margin-top: 8px;">
+          <span class="input-label">New Watchlist Name</span>
+          <input type="text" id="new-watchlist-name" class="modal-input" placeholder="e.g. Banks, Pharma...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="modal-cancel-btn" class="btn-secondary">Cancel</button>
+        <button id="create-watchlist-btn" class="btn-primary">Create</button>
+      </div>
     </div>
   </div>
 
