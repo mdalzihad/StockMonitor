@@ -1561,11 +1561,11 @@ function renderPortfolioView() {
     const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
 
     const netMoneyInvested = -h.netCashFlow;
-    const netAvgPrice = h.remainingShares > 0 ? Math.max(0, netMoneyInvested / h.remainingShares) : 0;
+    // Weighted-average cost of remaining shares (cost basis pool tracks this correctly after sells)
+    const netAvgPrice = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
     const remainingValue = h.remainingShares * currentPrice;
 
-    const origAvgCost = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
-    const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * origAvgCost)) : 0;
+    const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * netAvgPrice)) : 0;
     const totalPL = h.realisedPL + unrealisedPL;
 
     return {
