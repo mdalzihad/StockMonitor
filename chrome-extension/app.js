@@ -1821,7 +1821,6 @@ function renderPortfolioView() {
     const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
 
     // Effective avg price per share = (total raw spent on buys - total raw earned from sells) / remaining shares
-    // Selling at profit lowers your effective cost; selling at loss raises it
     const netAvgPrice = h.remainingShares > 0 ? ((h.totalRawInvested - h.totalRawEarned) / h.remainingShares) : 0;
     // Cost basis per share (with commission) for P/L calculations
     const costBasisPerShare = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
@@ -1830,6 +1829,12 @@ function renderPortfolioView() {
     const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * costBasisPerShare)) : 0;
     const totalPL = h.realisedPL + unrealisedPL;
 
+    // Extra computed fields for richer display
+    const totalInvested = h.remainingShares > 0 ? (h.remainingShares * costBasisPerShare) : 0;
+    const totalPLPct = totalInvested > 0 ? (totalPL / totalInvested) * 100 : 0;
+    const unrealisedPLPct = totalInvested > 0 ? (unrealisedPL / totalInvested) * 100 : 0;
+    const priceVsAvg = netAvgPrice > 0 ? ((currentPrice - netAvgPrice) / netAvgPrice) * 100 : 0;
+
     return {
       symbol,
       currentPrice,
@@ -1837,9 +1842,12 @@ function renderPortfolioView() {
       netCashFlow: h.netCashFlow,
       netAvgPrice,
       unrealisedPL,
+      unrealisedPLPct,
       realisedPL: h.realisedPL,
       totalPL,
-      remainingValue
+      totalPLPct,
+      remainingValue,
+      priceVsAvg
     };
   });
 
@@ -1925,18 +1933,43 @@ function renderPortfolioView() {
     if (noResults) noResults.style.display = 'none';
     if (tableEl) tableEl.style.display = '';
 
-    tbody.innerHTML = rows.map(r => `
-      <tr>
-        <td style="font-weight:700;">${r.symbol}</td>
-        <td>${r.currentPrice > 0 ? r.currentPrice.toFixed(2) : '—'}</td>
-        <td>${r.remainingShares}</td>
-        <td>৳ ${r.netCashFlow.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td class="avg-price-clickable" data-symbol="${r.symbol}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to see breakdown">${r.netAvgPrice.toFixed(2)}</td>
-        <td class="${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+    tbody.innerHTML = rows.map(r => {
+      const plColor = r.totalPL >= 0 ? 'var(--green)' : 'var(--red)';
+      const plBg = r.totalPL >= 0 ? 'var(--green-bg)' : 'var(--red-bg)';
+      const plSign = r.totalPL >= 0 ? '+' : '';
+      const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
+      const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
+      const isActive = r.remainingShares > 0;
+
+      return `
+      <tr style="border-left:3px solid ${isActive ? plColor : 'var(--border-color)'}; ${!isActive ? 'opacity:0.55;' : ''}">
+        <td>
+          <div style="font-weight:700;">${r.symbol}</div>
+          ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} shares</div>` : '<div style="font-size:10px; color:var(--text-muted);">Closed</div>'}
+        </td>
+        <td>
+          <div>${r.currentPrice > 0 ? '৳' + r.currentPrice.toFixed(2) : '—'}</div>
+          ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<div style="font-size:10px; color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</div>` : ''}
+        </td>
+        <td>
+          <div>৳ ${r.remainingValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+          ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} × ৳${r.currentPrice.toFixed(2)}</div>` : ''}
+        </td>
+        <td class="avg-price-clickable" data-symbol="${r.symbol}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to see breakdown">
+          ৳${r.netAvgPrice.toFixed(2)}
+        </td>
+        <td>
+          <div class="${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+          ${isActive ? `<span class="pl-badge ${r.unrealisedPLPct >= 0 ? 'profit' : 'loss'}">${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%</span>` : ''}
+        </td>
         <td class="${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td class="${r.totalPL >= 0 ? 'positive' : 'negative'}" style="font-weight:700;">৳ ${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        <td>
+          <div style="font-weight:700; color:${plColor};">৳ ${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+          <span class="pl-badge ${r.totalPL >= 0 ? 'profit' : 'loss'}">${plSign}${r.totalPLPct.toFixed(1)}%</span>
+        </td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
   }
 
   // Avg price breakdown click handlers
@@ -1952,15 +1985,54 @@ function renderPortfolioView() {
   const totalInvestment = totalPortfolioValue - totalUnrealisedPL;
   const totalPLPct = totalInvestment > 0 ? (totalPL / Math.abs(totalInvestment)) * 100 : 0;
 
-  document.getElementById("portfolio-total-value").innerText = `৳ ${totalPortfolioValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-  document.getElementById("portfolio-cash-balance").innerText = `৳ ${totalCashFlow.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+  // Portfolio Value card
+  const pvEl = document.getElementById("portfolio-total-value");
+  if (pvEl) {
+    pvEl.innerText = `৳ ${totalPortfolioValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+  }
 
+  // Total Investment card
+  const tiEl = document.getElementById("portfolio-total-invested");
+  if (tiEl) tiEl.innerText = `৳ ${totalInvestment.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+
+  // Cash Balance card
+  const cbEl = document.getElementById("portfolio-cash-balance");
+  if (cbEl) {
+    cbEl.innerText = `৳ ${totalCashFlow.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    cbEl.className = `stat-value ${totalCashFlow >= 0 ? 'positive' : 'negative'}`;
+  }
+
+  // Holdings count
+  const hcEl = document.getElementById("portfolio-holdings-count");
+  if (hcEl) {
+    const activeCount = rows.filter(r => r.remainingShares > 0).length;
+    const profitCount = rows.filter(r => r.totalPL > 0).length;
+    const lossCount = rows.filter(r => r.totalPL < 0).length;
+    hcEl.innerHTML = `<span style="font-size:24px; font-weight:800;">${activeCount}</span><span style="font-size:13px; color:var(--text-muted);"> / ${rows.length}</span>`;
+    const hcSub = document.getElementById("portfolio-holdings-breakdown");
+    if (hcSub) hcSub.innerHTML = `<span class="positive">${profitCount} profit</span> · <span class="negative">${lossCount} loss</span>`;
+  }
+
+  // Unrealised P/L card
+  const upEl = document.getElementById("portfolio-unrealised-pl");
+  if (upEl) {
+    upEl.innerText = `৳ ${totalUnrealisedPL.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    upEl.className = `stat-value ${totalUnrealisedPL >= 0 ? 'positive' : 'negative'}`;
+  }
+
+  // Realised P/L card
+  const rpEl = document.getElementById("portfolio-realised-pl");
+  if (rpEl) {
+    rpEl.innerText = `৳ ${totalRealisedPL.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    rpEl.className = `stat-value ${totalRealisedPL >= 0 ? 'positive' : 'negative'}`;
+  }
+
+  // Total P/L card
   const plEl = document.getElementById("portfolio-total-pl");
   if (plEl) {
     plEl.innerText = `৳ ${totalPL.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
     plEl.className = `stat-value ${totalPL >= 0 ? 'positive' : 'negative'}`;
   }
-
   const plPctEl = document.getElementById("portfolio-total-pl-percent");
   if (plPctEl) {
     plPctEl.innerText = `${totalPL >= 0 ? '+' : ''}${totalPLPct.toFixed(2)}%`;

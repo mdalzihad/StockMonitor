@@ -155,18 +155,35 @@
 
       <!-- Portfolio View -->
       <section id="portfolio-view" class="dashboard-view">
-        <div class="stats-grid">
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
           <div class="stat-card highlight">
-            <span class="stat-label">Total Portfolio Value</span>
-            <div class="stat-value" id="portfolio-total-value">৳ 0.00</div>
+            <span class="stat-label">Portfolio Value</span>
+            <div class="stat-value" id="portfolio-total-value">৳ 0</div>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Total Cash Balance</span>
-            <div class="stat-value" id="portfolio-cash-balance">৳ 0.00</div>
+            <span class="stat-label">Total Invested</span>
+            <div class="stat-value" id="portfolio-total-invested">৳ 0</div>
           </div>
           <div class="stat-card">
+            <span class="stat-label">Cash Balance</span>
+            <div class="stat-value" id="portfolio-cash-balance">৳ 0</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Active Holdings</span>
+            <div class="stat-value" id="portfolio-holdings-count">0</div>
+            <div class="stat-change" id="portfolio-holdings-breakdown"></div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Unrealised P/L</span>
+            <div class="stat-value" id="portfolio-unrealised-pl">৳ 0</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Realised P/L</span>
+            <div class="stat-value" id="portfolio-realised-pl">৳ 0</div>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--primary);">
             <span class="stat-label">Net Profit/Loss</span>
-            <div class="stat-value" id="portfolio-total-pl">৳ 0.00</div>
+            <div class="stat-value" id="portfolio-total-pl">৳ 0</div>
             <div class="stat-change" id="portfolio-total-pl-percent">0.00%</div>
           </div>
         </div>
@@ -213,14 +230,13 @@
           <table class="pro-table" id="portfolio-table">
             <thead>
               <tr>
-                <th class="sortable-th" data-sort-key="symbol">Stock Name <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="symbol">Stock <span class="sort-indicator"></span></th>
                 <th class="sortable-th" data-sort-key="currentPrice">Current Price <span class="sort-indicator"></span></th>
-                <th class="sortable-th" data-sort-key="remainingShares">Remaining Shares <span class="sort-indicator"></span></th>
-                <th class="sortable-th" data-sort-key="netCashFlow">Net Cash Balance <span class="sort-indicator"></span></th>
-                <th class="sortable-th" data-sort-key="netAvgPrice">Avg. Price / Share <span class="sort-indicator"></span></th>
-                <th class="sortable-th" data-sort-key="unrealisedPL">Unrealised Profit/Loss <span class="sort-indicator"></span></th>
-                <th class="sortable-th" data-sort-key="realisedPL">Realised Profit/Loss <span class="sort-indicator"></span></th>
-                <th class="sortable-th" data-sort-key="totalPL">Total Profit/Loss <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="remainingValue">Market Value <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="netAvgPrice">Eff. Avg Price <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="unrealisedPL">Unrealised P/L <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="realisedPL">Realised P/L <span class="sort-indicator"></span></th>
+                <th class="sortable-th" data-sort-key="totalPL">Total P/L <span class="sort-indicator"></span></th>
               </tr>
             </thead>
             <tbody id="portfolio-content">
