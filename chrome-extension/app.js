@@ -367,6 +367,10 @@ function setupEventListeners() {
        switchDashboardView('history');
     });
 
+    document.getElementById("download-portfolio-btn")?.addEventListener("click", () => {
+      downloadPortfolioCSV();
+    });
+
     // Portfolio search (debounced)
     document.getElementById("portfolio-search")?.addEventListener("input", (e) => {
       clearTimeout(portfolioSearchTimer);
@@ -1968,6 +1972,119 @@ function renderPortfolioView() {
 }
 
 // Show a modal breaking down how the avg price/share was derived for a symbol
+// Download portfolio data as CSV
+function downloadPortfolioCSV() {
+  // Replay transaction history to compute holdings (same logic as renderPortfolioView)
+  const sortedHistory = [...state.history].sort((a, b) => new Date(a.date) - new Date(b.date) || (a.id || 0) - (b.id || 0));
+  const holdings = {};
+
+  sortedHistory.forEach(tx => {
+    const symbol = tx.symbol;
+    if (!holdings[symbol]) {
+      holdings[symbol] = {
+        totalSharesBought: 0, totalCashInvested: 0,
+        totalRawInvested: 0, totalRawEarned: 0,
+        remainingShares: 0, realisedPL: 0, netCashFlow: 0
+      };
+    }
+    const txCount = parseFloat(tx.count);
+    const txPrice = parseFloat(tx.price);
+    const commPct = getEffectiveCommission(tx.commission);
+    const rawTotal = txCount * txPrice;
+    const commission = rawTotal * (commPct / 100);
+
+    if (tx.type === 'buy') {
+      const spent = rawTotal + commission;
+      holdings[symbol].totalSharesBought += txCount;
+      holdings[symbol].totalCashInvested += spent;
+      holdings[symbol].totalRawInvested += rawTotal;
+      holdings[symbol].remainingShares += txCount;
+      holdings[symbol].netCashFlow -= spent;
+    } else {
+      const earned = rawTotal - commission;
+      const sellCount = Math.min(txCount, holdings[symbol].totalSharesBought);
+      const avgCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalCashInvested / holdings[symbol].totalSharesBought) : 0;
+      const costOfSoldShares = sellCount * avgCostPerShare;
+      holdings[symbol].realisedPL += (earned - costOfSoldShares);
+      holdings[symbol].totalRawEarned += rawTotal;
+      holdings[symbol].totalSharesBought -= sellCount;
+      holdings[symbol].totalCashInvested -= costOfSoldShares;
+      holdings[symbol].remainingShares -= txCount;
+      holdings[symbol].netCashFlow += earned;
+    }
+  });
+
+  // Build rows
+  const rows = Object.keys(holdings)
+    .filter(s => holdings[s].remainingShares !== 0 || holdings[s].netCashFlow !== 0)
+    .map(symbol => {
+      const h = holdings[symbol];
+      const data = state.instruments[symbol];
+      const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
+      const netAvgPrice = h.remainingShares > 0 ? ((h.totalRawInvested - h.totalRawEarned) / h.remainingShares) : 0;
+      const costBasisPerShare = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
+      const remainingValue = h.remainingShares * currentPrice;
+      const unrealisedPL = h.remainingShares > 0 ? (remainingValue - (h.remainingShares * costBasisPerShare)) : 0;
+      const totalPL = h.realisedPL + unrealisedPL;
+
+      return {
+        symbol,
+        currentPrice,
+        remainingShares: h.remainingShares,
+        netCashFlow: h.netCashFlow,
+        netAvgPrice,
+        remainingValue,
+        unrealisedPL,
+        realisedPL: h.realisedPL,
+        totalPL
+      };
+    })
+    .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+  if (rows.length === 0) {
+    alert("No portfolio data to download. Add some transactions first.");
+    return;
+  }
+
+  // CSV header and rows
+  const headers = ["Stock", "Current Price", "Remaining Shares", "Net Cash Balance", "Eff. Avg Price/Share", "Market Value", "Unrealised P/L", "Realised P/L", "Total P/L"];
+  const csvLines = [
+    headers.join(","),
+    ...rows.map(r => [
+      r.symbol,
+      r.currentPrice.toFixed(2),
+      r.remainingShares,
+      r.netCashFlow.toFixed(2),
+      r.netAvgPrice.toFixed(2),
+      r.remainingValue.toFixed(2),
+      r.unrealisedPL.toFixed(2),
+      r.realisedPL.toFixed(2),
+      r.totalPL.toFixed(2)
+    ].join(","))
+  ];
+
+  // Summary row
+  const totalValue = rows.reduce((s, r) => s + r.remainingValue, 0);
+  const totalUnrealised = rows.reduce((s, r) => s + r.unrealisedPL, 0);
+  const totalRealised = rows.reduce((s, r) => s + r.realisedPL, 0);
+  const totalNetCash = rows.reduce((s, r) => s + r.netCashFlow, 0);
+  const grandTotalPL = totalRealised + totalUnrealised;
+  csvLines.push("");
+  csvLines.push(["TOTAL", "", "", totalNetCash.toFixed(2), "", totalValue.toFixed(2), totalUnrealised.toFixed(2), totalRealised.toFixed(2), grandTotalPL.toFixed(2)].join(","));
+
+  // Download
+  const blob = new Blob([csvLines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `portfolio_${date}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function showAvgPriceBreakdown(symbol) {
   // Gather all transactions for this symbol, sorted chronologically
   const txs = state.history
