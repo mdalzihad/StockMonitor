@@ -1926,13 +1926,21 @@ function renderPortfolioView() {
         <td>${r.currentPrice > 0 ? r.currentPrice.toFixed(2) : '—'}</td>
         <td>${r.remainingShares}</td>
         <td>৳ ${r.netCashFlow.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td>${r.netAvgPrice.toFixed(2)}</td>
+        <td class="avg-price-clickable" data-symbol="${r.symbol}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to see breakdown">${r.netAvgPrice.toFixed(2)}</td>
         <td class="${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
         <td class="${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
         <td class="${r.totalPL >= 0 ? 'positive' : 'negative'}" style="font-weight:700;">৳ ${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
       </tr>
     `).join("");
   }
+
+  // Avg price breakdown click handlers
+  tbody.querySelectorAll(".avg-price-clickable").forEach(td => {
+    td.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showAvgPriceBreakdown(td.dataset.symbol);
+    });
+  });
 
   // ── Step 10: Update summary cards ──
   const totalPL = totalRealisedPL + totalUnrealisedPL;
@@ -1956,6 +1964,154 @@ function renderPortfolioView() {
 
   // Render Pie Chart
   renderPortfolioPieChart(pieData, totalPortfolioValue);
+}
+
+// Show a modal breaking down how the avg price/share was derived for a symbol
+function showAvgPriceBreakdown(symbol) {
+  // Gather all transactions for this symbol, sorted chronologically
+  const txs = state.history
+    .filter(tx => tx.symbol === symbol)
+    .sort((a, b) => new Date(a.date) - new Date(b.date) || (a.id || 0) - (b.id || 0));
+
+  if (txs.length === 0) {
+    alert(`No transactions found for ${symbol}.`);
+    return;
+  }
+
+  // Replay transactions step-by-step to build the breakdown
+  let totalShares = 0;
+  let totalRawInvested = 0; // Raw cost (without commission)
+  const steps = [];
+
+  txs.forEach(tx => {
+    const count = parseFloat(tx.count);
+    const price = parseFloat(tx.price);
+    const rawTotal = count * price;
+    const commPct = getEffectiveCommission(tx.commission);
+    const commission = rawTotal * (commPct / 100);
+
+    if (tx.type === 'buy') {
+      totalShares += count;
+      totalRawInvested += rawTotal;
+      const avgAfter = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+      steps.push({
+        date: tx.date,
+        type: 'Buy',
+        count,
+        price,
+        rawTotal,
+        commPct,
+        totalShares,
+        totalRawInvested,
+        avgAfter
+      });
+    } else {
+      // On sell, reduce proportionally
+      const avgCostBefore = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+      const sellCount = Math.min(count, totalShares);
+      totalRawInvested -= sellCount * avgCostBefore;
+      totalShares -= sellCount;
+      const avgAfter = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+      steps.push({
+        date: tx.date,
+        type: 'Sell',
+        count,
+        price,
+        rawTotal,
+        commPct,
+        totalShares,
+        totalRawInvested,
+        avgAfter
+      });
+    }
+  });
+
+  const finalAvg = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+
+  // Build modal HTML
+  const modalHTML = `
+    <div id="avg-price-modal" class="modal active" style="z-index:1000;">
+      <div class="modal-content" style="max-width:700px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+        <div class="modal-header">
+          <div>
+            <h3 style="margin:0;">Avg Price Breakdown — ${symbol}</h3>
+            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);">Weighted average cost basis (excluding commission)</p>
+          </div>
+          <button id="avg-price-modal-close" class="btn-icon" style="border:none; width:24px; height:24px; cursor:pointer;">✕</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto; flex:1;">
+          <table class="pro-table" style="width:100%; font-size:12px;">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Cost</th>
+                <th>Comm%</th>
+                <th>Shares After</th>
+                <th>Pool After</th>
+                <th>Avg After</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${steps.map((s, i) => `
+                <tr>
+                  <td style="color:var(--text-muted);">${i + 1}</td>
+                  <td>${s.date}</td>
+                  <td><span class="type-pill ${s.type.toLowerCase()}">${s.type}</span></td>
+                  <td>${s.count}</td>
+                  <td>৳${s.price.toFixed(2)}</td>
+                  <td>৳${s.rawTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td>${s.commPct}%</td>
+                  <td style="font-weight:600;">${s.totalShares}</td>
+                  <td>৳${s.totalRawInvested.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td style="font-weight:700; color:var(--primary);">৳${s.avgAfter.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+
+          <div style="margin-top:16px; padding:12px 16px; background:var(--primary-glow); border-radius:10px; border:1px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Final Average Price / Share</div>
+                <div style="font-size:22px; font-weight:800; color:var(--primary); margin-top:2px;">৳ ${finalAvg.toFixed(2)}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:11px; color:var(--text-muted);">Remaining Shares: <strong>${totalShares}</strong></div>
+                <div style="font-size:11px; color:var(--text-muted);">Total Investment Pool: <strong>৳${totalRawInvested.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px; font-size:11px; color:var(--text-muted); line-height:1.6;">
+            <strong>How it works:</strong> On each <span class="type-pill buy" style="font-size:10px;">Buy</span>, shares and cost are added to the pool.
+            On each <span class="type-pill sell" style="font-size:10px;">Sell</span>, shares and proportional cost are removed.
+            Avg = Total Raw Investment Pool ÷ Total Shares. Commission is excluded from the average price display but included in P/L calculations.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="avg-price-modal-done" class="btn-primary" style="width:100%;">Done</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  document.getElementById("avg-price-modal")?.remove();
+
+  // Insert modal
+  document.body.insertAdjacentHTML("beforeend", modalHTML);
+
+  // Close handlers
+  const closeModal = () => document.getElementById("avg-price-modal")?.remove();
+  document.getElementById("avg-price-modal-close")?.addEventListener("click", closeModal);
+  document.getElementById("avg-price-modal-done")?.addEventListener("click", closeModal);
+  document.getElementById("avg-price-modal")?.addEventListener("click", (e) => {
+    if (e.target.id === "avg-price-modal") closeModal();
+  });
 }
 
 function renderPortfolioPieChart(data, totalValue) {
