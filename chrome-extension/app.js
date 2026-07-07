@@ -1765,7 +1765,8 @@ function renderPortfolioView() {
       holdings[symbol] = {
         totalSharesBought: 0,
         totalCashInvested: 0,
-        totalRawInvested: 0,
+        totalRawInvested: 0,  // cumulative raw cost of all buys
+        totalRawEarned: 0,    // cumulative raw proceeds of all sells
         remainingShares: 0,
         realisedPL: 0,
         netCashFlow: 0,
@@ -1796,9 +1797,8 @@ function renderPortfolioView() {
       const costOfSoldShares = sellCount * avgCostPerShare;
       holdings[symbol].realisedPL += (earned - costOfSoldShares);
 
-      // Reduce raw investment proportionally
-      const rawCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalRawInvested / holdings[symbol].totalSharesBought) : 0;
-      holdings[symbol].totalRawInvested -= sellCount * rawCostPerShare;
+      // Track actual raw sell proceeds (for effective avg price)
+      holdings[symbol].totalRawEarned += rawTotal;
       holdings[symbol].totalSharesBought -= sellCount;
       holdings[symbol].totalCashInvested -= costOfSoldShares;
 
@@ -1816,8 +1816,9 @@ function renderPortfolioView() {
     const data = state.instruments[symbol];
     const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
 
-    // Avg price per share = raw purchase price (without commission) for display
-    const netAvgPrice = h.totalSharesBought > 0 ? (h.totalRawInvested / h.totalSharesBought) : 0;
+    // Effective avg price per share = (total raw spent on buys - total raw earned from sells) / remaining shares
+    // Selling at profit lowers your effective cost; selling at loss raises it
+    const netAvgPrice = h.remainingShares > 0 ? ((h.totalRawInvested - h.totalRawEarned) / h.remainingShares) : 0;
     // Cost basis per share (with commission) for P/L calculations
     const costBasisPerShare = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
     const remainingValue = h.remainingShares * currentPrice;
@@ -1980,7 +1981,8 @@ function showAvgPriceBreakdown(symbol) {
 
   // Replay transactions step-by-step to build the breakdown
   let totalShares = 0;
-  let totalRawInvested = 0; // Raw cost (without commission)
+  let totalRawSpent = 0;   // cumulative raw cost of buys
+  let totalRawEarned = 0;  // cumulative raw proceeds from sells
   const steps = [];
 
   txs.forEach(tx => {
@@ -1988,12 +1990,12 @@ function showAvgPriceBreakdown(symbol) {
     const price = parseFloat(tx.price);
     const rawTotal = count * price;
     const commPct = getEffectiveCommission(tx.commission);
-    const commission = rawTotal * (commPct / 100);
 
     if (tx.type === 'buy') {
       totalShares += count;
-      totalRawInvested += rawTotal;
-      const avgAfter = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+      totalRawSpent += rawTotal;
+      const netPool = totalRawSpent - totalRawEarned;
+      const avgAfter = totalShares > 0 ? (netPool / totalShares) : 0;
       steps.push({
         date: tx.date,
         type: 'Buy',
@@ -2002,40 +2004,44 @@ function showAvgPriceBreakdown(symbol) {
         rawTotal,
         commPct,
         totalShares,
-        totalRawInvested,
+        totalRawSpent,
+        totalRawEarned,
+        netPool,
         avgAfter
       });
     } else {
-      // On sell, reduce proportionally
-      const avgCostBefore = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
       const sellCount = Math.min(count, totalShares);
-      totalRawInvested -= sellCount * avgCostBefore;
       totalShares -= sellCount;
-      const avgAfter = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+      totalRawEarned += rawTotal;
+      const netPool = totalRawSpent - totalRawEarned;
+      const avgAfter = totalShares > 0 ? (netPool / totalShares) : 0;
       steps.push({
         date: tx.date,
         type: 'Sell',
-        count,
+        count: sellCount,
         price,
         rawTotal,
         commPct,
         totalShares,
-        totalRawInvested,
+        totalRawSpent,
+        totalRawEarned,
+        netPool,
         avgAfter
       });
     }
   });
 
-  const finalAvg = totalShares > 0 ? (totalRawInvested / totalShares) : 0;
+  const finalNetPool = totalRawSpent - totalRawEarned;
+  const finalAvg = totalShares > 0 ? (finalNetPool / totalShares) : 0;
 
   // Build modal HTML
   const modalHTML = `
     <div id="avg-price-modal" class="modal active" style="z-index:1000;">
-      <div class="modal-content" style="max-width:700px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+      <div class="modal-content" style="max-width:750px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
         <div class="modal-header">
           <div>
-            <h3 style="margin:0;">Avg Price Breakdown — ${symbol}</h3>
-            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);">Weighted average cost basis (excluding commission)</p>
+            <h3 style="margin:0;">Effective Avg Price — ${symbol}</h3>
+            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);">How your effective cost per share changed with each transaction</p>
           </div>
           <button id="avg-price-modal-close" class="btn-icon" style="border:none; width:24px; height:24px; cursor:pointer;">✕</button>
         </div>
@@ -2048,11 +2054,12 @@ function showAvgPriceBreakdown(symbol) {
                 <th>Type</th>
                 <th>Qty</th>
                 <th>Price</th>
-                <th>Cost</th>
-                <th>Comm%</th>
-                <th>Shares After</th>
-                <th>Pool After</th>
-                <th>Avg After</th>
+                <th>Amount</th>
+                <th>Total Bought</th>
+                <th>Total Sold</th>
+                <th>Net Pool</th>
+                <th>Shares</th>
+                <th>Eff. Avg</th>
               </tr>
             </thead>
             <tbody>
@@ -2063,10 +2070,11 @@ function showAvgPriceBreakdown(symbol) {
                   <td><span class="type-pill ${s.type.toLowerCase()}">${s.type}</span></td>
                   <td>${s.count}</td>
                   <td>৳${s.price.toFixed(2)}</td>
-                  <td>৳${s.rawTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                  <td>${s.commPct}%</td>
-                  <td style="font-weight:600;">${s.totalShares}</td>
-                  <td>৳${s.totalRawInvested.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td class="${s.type === 'Buy' ? '' : 'positive'}">৳${s.rawTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td>৳${s.totalRawSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td>৳${s.totalRawEarned.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td style="font-weight:600;">৳${s.netPool.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                  <td>${s.totalShares}</td>
                   <td style="font-weight:700; color:var(--primary);">৳${s.avgAfter.toFixed(2)}</td>
                 </tr>
               `).join("")}
@@ -2074,22 +2082,25 @@ function showAvgPriceBreakdown(symbol) {
           </table>
 
           <div style="margin-top:16px; padding:12px 16px; background:var(--primary-glow); border-radius:10px; border:1px solid var(--primary);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
               <div>
-                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Final Average Price / Share</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Effective Avg Price / Share</div>
                 <div style="font-size:22px; font-weight:800; color:var(--primary); margin-top:2px;">৳ ${finalAvg.toFixed(2)}</div>
               </div>
               <div style="text-align:right;">
                 <div style="font-size:11px; color:var(--text-muted);">Remaining Shares: <strong>${totalShares}</strong></div>
-                <div style="font-size:11px; color:var(--text-muted);">Total Investment Pool: <strong>৳${totalRawInvested.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
+                <div style="font-size:11px; color:var(--text-muted);">Total Spent (Buys): <strong>৳${totalRawSpent.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
+                <div style="font-size:11px; color:var(--text-muted);">Total Earned (Sells): <strong>৳${totalRawEarned.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
+                <div style="font-size:11px; color:var(--text-muted);">Net Investment Pool: <strong>৳${finalNetPool.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
               </div>
             </div>
           </div>
 
           <div style="margin-top:12px; font-size:11px; color:var(--text-muted); line-height:1.6;">
-            <strong>How it works:</strong> On each <span class="type-pill buy" style="font-size:10px;">Buy</span>, shares and cost are added to the pool.
-            On each <span class="type-pill sell" style="font-size:10px;">Sell</span>, shares and proportional cost are removed.
-            Avg = Total Raw Investment Pool ÷ Total Shares. Commission is excluded from the average price display but included in P/L calculations.
+            <strong>How it works:</strong> Each <span class="type-pill buy" style="font-size:10px;">Buy</span> adds to your total spent.
+            Each <span class="type-pill sell" style="font-size:10px;">Sell</span> adds to your total earned.
+            <strong>Net Pool</strong> = Total Spent − Total Earned. <strong>Effective Avg</strong> = Net Pool ÷ Remaining Shares.
+            Selling at a profit reduces your effective cost; selling at a loss increases it. Commission excluded from avg display but included in P/L.
           </div>
         </div>
         <div class="modal-footer">
