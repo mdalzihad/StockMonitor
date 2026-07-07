@@ -14,8 +14,13 @@ let state = {
   portfolioSort: { key: 'symbol', dir: 'asc' }, // Current sort for portfolio table
   portfolioSearch: '',      // Search filter text
   portfolioFilterPL: 'all', // 'all' | 'profit' | 'loss'
-  portfolioFilterHolding: 'all' // 'all' | 'active' | 'closed'
+  portfolioFilterHolding: 'all', // 'all' | 'active' | 'closed'
+  drawerSymbol: null,
+  editingSymbol: null,
+  chartInterval: 'D'
 };
+
+let portfolioSearchTimer;
 
 // Initialize the Application
 document.addEventListener("DOMContentLoaded", async () => {
@@ -271,10 +276,13 @@ function setupEventListeners() {
        switchDashboardView('history');
     });
 
-    // Portfolio search
+    // Portfolio search (debounced)
     document.getElementById("portfolio-search")?.addEventListener("input", (e) => {
-      state.portfolioSearch = e.target.value.trim().toUpperCase();
-      renderPortfolioView();
+      clearTimeout(portfolioSearchTimer);
+      portfolioSearchTimer = setTimeout(() => {
+        state.portfolioSearch = e.target.value.trim().toUpperCase();
+        renderPortfolioView();
+      }, 200);
     });
 
     // Portfolio P/L filter
@@ -306,6 +314,11 @@ function setupEventListeners() {
     document.getElementById("history-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       await addTransactionFromForm();
+    });
+
+    document.getElementById("cancel-edit-btn")?.addEventListener("click", () => {
+      cancelEditTransaction();
+      renderHistoryView();
     });
 
     document.getElementById("clear-history-btn")?.addEventListener("click", async () => {
@@ -352,36 +365,34 @@ function setupEventListeners() {
 
         // Validate each transaction has required fields
         const valid = imported.every(tx =>
-          tx.date && tx.symbol && tx.type && tx.count !== undefined && tx.price !== undefined
+          tx.date && typeof tx.date === 'string' &&
+          tx.symbol && typeof tx.symbol === 'string' &&
+          (tx.type === 'buy' || tx.type === 'sell') &&
+          typeof tx.count === 'number' && tx.count > 0 &&
+          typeof tx.price === 'number' && tx.price >= 0
         );
         if (!valid) {
-          alert("Invalid file: each transaction must have date, symbol, type, count, and price.");
+          alert("Invalid file: each transaction must have date, symbol, type (buy/sell), count (>0), and price (>=0).");
           return;
         }
 
-        const action = confirm(
-          `Found ${imported.length} transaction(s).\n\nOK = Merge with existing (${state.history.length} records)\nCancel = Replace all existing`
+        const mergeChoice = confirm(
+          `Found ${imported.length} transaction(s).\n\nOK = Merge with existing (${state.history.length} records)\nCancel = Abort import`
         );
-
-        if (action) {
-          // Merge: add imported, avoid duplicates by id
-          const existingIds = new Set(state.history.map(tx => tx.id));
-          const newTxns = imported.map(tx => ({
-            ...tx,
-            id: tx.id && !existingIds.has(tx.id) ? tx.id : Date.now() + Math.random(),
-            count: parseFloat(tx.count),
-            price: parseFloat(tx.price)
-          }));
-          state.history = [...state.history, ...newTxns];
-        } else {
-          // Replace
-          state.history = imported.map(tx => ({
-            ...tx,
-            id: tx.id || Date.now() + Math.random(),
-            count: parseFloat(tx.count),
-            price: parseFloat(tx.price)
-          }));
+        if (!mergeChoice) {
+          alert("Import cancelled.");
+          return;
         }
+
+        // Merge: add imported, avoid duplicates by id
+        const existingIds = new Set(state.history.map(tx => tx.id));
+        const newTxns = imported.map(tx => ({
+          ...tx,
+          id: tx.id && !existingIds.has(tx.id) ? tx.id : Date.now() + Math.floor(Math.random() * 100000),
+          count: parseFloat(tx.count),
+          price: parseFloat(tx.price)
+        }));
+        state.history = [...state.history, ...newTxns];
 
         state.history.sort((a, b) => new Date(b.date) - new Date(a.date));
         await saveWatchlistsToStorage();
@@ -474,7 +485,7 @@ function setupEventListeners() {
     
     const saveObj = {};
     if (selectInterval) {
-      saveObj.pollingInterval = parseInt(selectInterval.value);
+      saveObj.pollingInterval = parseInt(selectInterval.value, 10);
     }
     if (chartsCheckbox) {
       saveObj.showCharts = chartsCheckbox.checked;
@@ -836,7 +847,7 @@ function renderUI() {
     const sparklineHTML = state.showCharts ? generateSparklineSVG(symbol, data, isPositive) : "";
 
     // Format Volume nicely (e.g. 1.2M or 450K)
-    const rawVolume = parseInt(data.volume) || 0;
+    const rawVolume = parseInt(data.volume, 10) || 0;
     let formattedVolume = rawVolume.toLocaleString();
     if (rawVolume >= 1000000) {
       formattedVolume = (rawVolume / 1000000).toFixed(2) + "M";
@@ -934,7 +945,7 @@ function showStockDetails(symbol, data) {
   document.getElementById("stat-low").innerText = (parseFloat(data.low) || 0).toFixed(2);
   document.getElementById("stat-ycp").innerText = ycp.toFixed(2);
   
-  document.getElementById("stat-volume").innerText = (parseInt(data.volume) || 0).toLocaleString();
+  document.getElementById("stat-volume").innerText = (parseInt(data.volume, 10) || 0).toLocaleString();
   document.getElementById("stat-value").innerText = data.value ? parseFloat(data.value).toFixed(2) + "M" : "—";
   document.getElementById("stat-category").innerText = data.category || "N/A";
   document.getElementById("stat-sector").innerText = data.sector_id || "N/A";
@@ -1016,7 +1027,7 @@ async function renderDrawerAlerts(symbol) {
 
   container.querySelectorAll(".drawer-alert-delete-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const idx = parseInt(btn.dataset.index);
+      const idx = parseInt(btn.dataset.index, 10);
       const { alerts } = await chrome.storage.local.get("alerts");
       if (alerts && alerts[idx] !== undefined) {
         alerts.splice(idx, 1);
@@ -1115,7 +1126,7 @@ async function renderAlertsList() {
   // Add click handlers for delete buttons
   container.querySelectorAll(".btn-delete-alert").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const idx = parseInt(btn.dataset.index);
+      const idx = parseInt(btn.dataset.index, 10);
       await deleteAlert(idx);
     });
   });
@@ -1443,7 +1454,7 @@ function renderMarketWatchlist() {
         <td style="font-size:11px; font-weight:600;">
           ${calculateTechnicalInsight(data)}
         </td>
-        <td>${(parseInt(data.volume) || 0).toLocaleString()}</td>
+        <td>${(parseInt(data.volume, 10) || 0).toLocaleString()}</td>
         <td>
           <div style="display:flex; gap:8px;">
             <button class="btn-icon btn-portfolio-edit" data-symbol="${symbol}" title="Add to Portfolio" style="width:28px; height:28px; border-radius:6px; background:var(--primary-glow); color:var(--primary); border:none;">
@@ -1487,7 +1498,7 @@ function updateMarketIndices() {
     const price = parseFloat(dsex.close);
     const ycp = parseFloat(dsex.ycp);
     const change = price - ycp;
-    const pct = (change / ycp) * 100;
+    const pct = ycp ? (change / ycp) * 100 : 0;
     
     document.querySelector("#index-dsex .stat-value").innerText = price.toLocaleString();
     const changeEl = document.querySelector("#index-dsex .stat-change");
@@ -1505,7 +1516,7 @@ function renderPortfolioView() {
   let totalCashFlow = 0;
 
   // Sort chronologically (oldest first) for correct cost-basis tracking
-  const sortedHistory = [...state.history].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sortedHistory = [...state.history].sort((a, b) => new Date(a.date) - new Date(b.date) || (a.id || 0) - (b.id || 0));
 
   sortedHistory.forEach(tx => {
     const symbol = tx.symbol;
@@ -1535,15 +1546,14 @@ function renderPortfolioView() {
       totalCashFlow -= spent;
     } else {
       const earned = rawTotal - commission;
+      // Clamp to prevent negative remaining shares
+      const sellCount = Math.min(txCount, holdings[symbol].totalSharesBought);
 
-      // Calculate Realised P/L for this sell using weighted-average cost
       const avgCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalCashInvested / holdings[symbol].totalSharesBought) : 0;
-      const costOfSoldShares = txCount * avgCostPerShare;
+      const costOfSoldShares = sellCount * avgCostPerShare;
       holdings[symbol].realisedPL += (earned - costOfSoldShares);
 
-      // Remove sold shares from cost basis pool so future
-      // buys don't get diluted by already-sold lots
-      holdings[symbol].totalSharesBought -= txCount;
+      holdings[symbol].totalSharesBought -= sellCount;
       holdings[symbol].totalCashInvested -= costOfSoldShares;
 
       holdings[symbol].remainingShares -= txCount;
@@ -1560,7 +1570,6 @@ function renderPortfolioView() {
     const data = state.instruments[symbol];
     const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
 
-    const netMoneyInvested = -h.netCashFlow;
     // Weighted-average cost of remaining shares (cost basis pool tracks this correctly after sells)
     const netAvgPrice = h.totalSharesBought > 0 ? (h.totalCashInvested / h.totalSharesBought) : 0;
     const remainingValue = h.remainingShares * currentPrice;
@@ -1775,7 +1784,7 @@ function renderPortfolioPieChart(data, totalValue) {
   const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths.join('')}${centerText}</svg>`;
 
   // Legend
-  const legend = data
+  const legend = [...data]
     .sort((a, b) => b.value - a.value)
     .map((item, i) => {
       const pct = ((item.value / totalValue) * 100).toFixed(1);
@@ -1797,6 +1806,10 @@ function renderPortfolioPieChart(data, totalValue) {
 }
 
 async function addTransactionFromForm() {
+  const submitBtn = document.querySelector("#history-form button[type='submit']");
+  if (submitBtn?.disabled) return;
+  if (submitBtn) submitBtn.disabled = true;
+
   const date = document.getElementById("hist-date").value;
   const symbol = document.getElementById("hist-symbol").value.toUpperCase();
   const type = document.getElementById("hist-type").value;
@@ -1806,6 +1819,7 @@ async function addTransactionFromForm() {
 
   if (!symbol || isNaN(count) || isNaN(price)) {
     alert("Please fill all required fields correctly.");
+    if (submitBtn) submitBtn.disabled = false;
     return;
   }
 
@@ -1848,6 +1862,7 @@ async function addTransactionFromForm() {
   document.getElementById("hist-price").value = "";
   
   renderDashboardUI();
+  if (submitBtn) submitBtn.disabled = false;
 }
 
 function editTransaction(id) {
@@ -1923,7 +1938,7 @@ function renderHistoryView() {
         <td style="font-weight:700;">${tx.symbol}</td>
         <td><span class="type-pill ${tx.type}">${tx.type}</span></td>
         <td>${tx.count}</td>
-        <td>${tx.price.toFixed(2)}</td>
+        <td>${parseFloat(tx.price).toFixed(2)}</td>
         <td>${effectiveComm}%</td>
         <td style="font-weight:600;">৳ ${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
         <td>
@@ -1942,7 +1957,7 @@ function renderHistoryView() {
 
   tbody.querySelectorAll(".btn-edit-history").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = parseInt(btn.dataset.id);
+      const id = parseInt(btn.dataset.id, 10);
       editTransaction(id);
       renderHistoryView(); // Re-render to highlight the editing row
     });
@@ -1950,7 +1965,7 @@ function renderHistoryView() {
 
   tbody.querySelectorAll(".btn-delete-history").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const id = parseInt(btn.dataset.id);
+      const id = parseInt(btn.dataset.id, 10);
       // If deleting the transaction being edited, cancel edit mode
       if (state.editingTransactionId === id) {
         cancelEditTransaction();
@@ -1959,12 +1974,6 @@ function renderHistoryView() {
       await saveWatchlistsToStorage();
       renderHistoryView();
     });
-  });
-
-  // Cancel edit button listener
-  document.getElementById("cancel-edit-btn")?.addEventListener("click", () => {
-    cancelEditTransaction();
-    renderHistoryView();
   });
 }
 
@@ -1988,18 +1997,12 @@ function renderTechnicalView() {
   container.innerHTML = "";
   
   const interval = state.chartInterval || "D";
-  const layout = state.chartLayout || "grid";
+  const layout = state.chartLayout || "list";
 
   // Apply layout class to container
   container.className = `charts-grid ${layout}-layout`;
 
   activeList.symbols.forEach(symbol => {
-    const interval = state.chartInterval || "D";
-    const layout = state.chartLayout || "list";
-
-    // Apply layout class to container
-    container.className = `charts-grid ${layout}-layout`;
-
     const card = document.createElement("div");
     card.className = `chart-card technical-card ${layout}-card`;
     
@@ -2014,7 +2017,7 @@ function renderTechnicalView() {
           src="https://s.tradingview.com/widgetembed/?symbol=DSEBD:${symbol}&interval=${interval}&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&hideideas=1&theme=dark&style=1&timezone=Asia/Dhaka&withdateranges=1&showpopupbutton=1&locale=en" 
           width="100%" 
           height="100%" 
-          frameborder="0" 
+          style="border:none;" 
           allowtransparency="true" 
           scrolling="no" 
           allowfullscreen>
@@ -2105,8 +2108,8 @@ function openPortfolioEdit(symbol) {
   
   state.editingSymbol = symbol;
   symbolSpan.innerText = symbol;
-  buyInput.value = current.buyPrice;
-  qtyInput.value = current.quantity;
+  if (buyInput) buyInput.value = current.buyPrice;
+  if (qtyInput) qtyInput.value = current.quantity;
 
   modal.classList.add("active");
 }
@@ -2114,7 +2117,7 @@ function openPortfolioEdit(symbol) {
 async function savePortfolioHolding() {
   const symbol = state.editingSymbol;
   const buyPrice = parseFloat(document.getElementById("buy-price-input").value) || 0;
-  const quantity = parseInt(document.getElementById("buy-quantity-input").value) || 0;
+  const quantity = parseInt(document.getElementById("buy-quantity-input").value, 10) || 0;
 
   if (quantity <= 0) {
     delete state.portfolio[symbol];
@@ -2123,7 +2126,7 @@ async function savePortfolioHolding() {
   }
 
   await saveWatchlistsToStorage();
-  document.getElementById("portfolio-modal").classList.remove("active");
+  document.getElementById("portfolio-modal")?.classList.remove("active");
 }
 
 function renderMomentumView() {
@@ -2202,7 +2205,7 @@ function calculateSignal(data) {
   const ma30 = parseFloat(data['30d']) || price;
   const ma365 = parseFloat(data['365d']) || price;
   
-  const dailyChange = ((price - ycp) / ycp) * 100;
+  const dailyChange = ycp ? ((price - ycp) / ycp) * 100 : 0;
   
   // Trend Analysis
   const isAboveMA30 = price > ma30;
@@ -2220,7 +2223,7 @@ function calculateTechnicalInsight(data) {
   const price = parseFloat(data.close) || 0;
   const high = parseFloat(data.high) || 0;
   const low = parseFloat(data.low) || price;
-  const volume = parseInt(data.volume) || 0;
+  const volume = parseInt(data.volume, 10) || 0;
   
   const historyKeys = ['7d', '15d', '30d', '90d', '180d'];
   const history = historyKeys.map(k => parseFloat(data[k])).filter(v => !isNaN(v) && v > 0);
