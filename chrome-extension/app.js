@@ -1109,7 +1109,98 @@ function showStockDetails(symbol, data) {
     });
   }
 
+  // Watchlist add/remove controls
+  updateDrawerWatchlistControls(symbol);
+
   drawer.classList.add("active");
+}
+
+// Update the watchlist star button and dropdown for the given symbol
+function updateDrawerWatchlistControls(symbol) {
+  const toggleBtn = document.getElementById("drawer-watchlist-toggle");
+  const wlIcon = document.getElementById("drawer-wl-icon");
+  const dropdown = document.getElementById("drawer-wl-dropdown");
+  const wlList = document.getElementById("drawer-wl-list");
+
+  if (!toggleBtn || !wlIcon) return;
+
+  // Check if symbol is in the active watchlist
+  const activeList = state.watchlists.find(l => l.id === state.activeId);
+  const isInActive = activeList?.symbols.includes(symbol) || false;
+
+  // Update star icon: filled if in active watchlist, outline if not
+  if (isInActive) {
+    wlIcon.setAttribute("fill", "var(--primary)");
+    wlIcon.setAttribute("stroke", "var(--primary)");
+    toggleBtn.style.background = "var(--primary-glow)";
+    toggleBtn.title = "In watchlist (click to manage)";
+  } else {
+    wlIcon.setAttribute("fill", "none");
+    wlIcon.setAttribute("stroke", "currentColor");
+    toggleBtn.style.background = "var(--bg-card)";
+    toggleBtn.title = "Add to watchlist";
+  }
+
+  // Toggle dropdown on star click (replace listener)
+  const newToggle = toggleBtn.cloneNode(true);
+  toggleBtn.parentNode.replaceChild(newToggle, toggleBtn);
+  newToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (dropdown.style.display === "none") {
+      renderDrawerWatchlistDropdown(symbol);
+      dropdown.style.display = "block";
+    } else {
+      dropdown.style.display = "none";
+    }
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", function closeWlDropdown(e) {
+    if (dropdown && !dropdown.contains(e.target) && e.target !== newToggle && !newToggle.contains(e.target)) {
+      dropdown.style.display = "none";
+    }
+  }, { once: false });
+}
+
+// Render the multi-watchlist checkbox dropdown for the drawer
+function renderDrawerWatchlistDropdown(symbol) {
+  const wlList = document.getElementById("drawer-wl-list");
+  if (!wlList) return;
+
+  wlList.innerHTML = state.watchlists.map(list => {
+    const isIn = list.symbols.includes(symbol);
+    const isDefault = list.id === state.defaultWatchlistId;
+    return `
+      <label class="drawer-wl-item" data-list-id="${list.id}" style="display:flex; align-items:center; gap:8px; padding:6px 12px; cursor:pointer; font-size:13px; color:var(--text-primary); transition:background 0.15s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+        <input type="checkbox" ${isIn ? 'checked' : ''} data-list-id="${list.id}" style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);">
+        <span style="flex:1;">${isDefault ? '★ ' : ''}${list.name}</span>
+        <span style="font-size:11px; color:var(--text-muted);">${list.symbols.length}</span>
+      </label>
+    `;
+  }).join("");
+
+  // Checkbox change listeners
+  wlList.querySelectorAll("input[type='checkbox']").forEach(cb => {
+    cb.addEventListener("change", async () => {
+      const listId = cb.dataset.listId;
+      const list = state.watchlists.find(l => l.id === listId);
+      if (!list) return;
+
+      if (cb.checked) {
+        if (!list.symbols.includes(symbol)) {
+          list.symbols.push(symbol);
+        }
+      } else {
+        list.symbols = list.symbols.filter(s => s !== symbol);
+      }
+
+      await saveWatchlistsToStorage();
+      renderUI();
+      updateDrawerWatchlistControls(symbol);
+      // Re-render dropdown to update counts
+      renderDrawerWatchlistDropdown(symbol);
+    });
+  });
 }
 
 async function renderDrawerAlerts(symbol) {

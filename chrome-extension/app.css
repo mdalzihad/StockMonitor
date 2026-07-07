@@ -1301,6 +1301,18 @@ header {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 16px;
+  position: relative;
+}
+
+.drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drawer-watchlist-btn:hover {
+  background: var(--primary-glow) !important;
+  color: var(--primary);
 }
 
 .drawer-title-group {
