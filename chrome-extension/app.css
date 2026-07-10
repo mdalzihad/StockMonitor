@@ -1538,6 +1538,51 @@ header {
   color: var(--text-primary);
 }
 
+/* Sell Plan View */
+.sellplan-col-loss {
+  color: var(--red) !important;
+}
+
+.sellplan-col-profit {
+  color: var(--green) !important;
+}
+
+.sellplan-cell-loss {
+  background: var(--red-bg);
+}
+
+.sellplan-cell-profit {
+  background: var(--green-bg);
+}
+
+.sellplan-target-price {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.sellplan-total {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.sellplan-sub-th {
+  font-weight: 500 !important;
+  font-size: 10px !important;
+  color: var(--green) !important;
+}
+
+.sellplan-free {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.sellplan-free-value {
+  color: var(--green);
+  font-weight: 600;
+}
+
 /* Settings & Alerts Modal Styles */
 .modal-input-select {
   width: 100%;
@@ -1992,4 +2037,25 @@ td.negative, .negative { color: var(--red); }
 }
 #portfolio-table tbody tr:hover {
   background: var(--bg-card-hover);
+}
+
+/* Dividend type pills */
+.type-pill.dividend {
+  background: rgba(139, 92, 246, 0.15);
+  color: #7c3aed;
+}
+.type-pill.bonus {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+@media (prefers-color-scheme: dark) {
+  .type-pill.dividend {
+    background: rgba(139, 92, 246, 0.25);
+    color: #a78bfa;
+  }
+  .type-pill.bonus {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+  }
 }

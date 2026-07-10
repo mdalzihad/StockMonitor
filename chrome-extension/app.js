@@ -371,6 +371,28 @@ function setupEventListeners() {
       downloadPortfolioCSV();
     });
 
+    // Adapt form fields based on transaction type
+    document.getElementById("hist-type")?.addEventListener("change", (e) => {
+      const type = e.target.value;
+      const commGroup = document.getElementById("hist-commission")?.closest('.form-group');
+      const priceLabel = document.querySelector('label[for="hist-price"]');
+      const countLabel = document.querySelector('label[for="hist-count"]');
+      
+      if (type === 'cash_dividend') {
+        if (commGroup) commGroup.style.display = 'none';
+        if (priceLabel) priceLabel.textContent = 'Dividend / Share';
+        if (countLabel) countLabel.textContent = 'Shares Held';
+      } else if (type === 'stock_dividend') {
+        if (commGroup) commGroup.style.display = 'none';
+        if (priceLabel) priceLabel.textContent = 'Price (set 0)';
+        if (countLabel) countLabel.textContent = 'Bonus Shares';
+      } else {
+        if (commGroup) commGroup.style.display = '';
+        if (priceLabel) priceLabel.textContent = 'Price / Stock';
+        if (countLabel) countLabel.textContent = 'Count (Quantity)';
+      }
+    });
+
     // Portfolio search (debounced)
     document.getElementById("portfolio-search")?.addEventListener("input", (e) => {
       clearTimeout(portfolioSearchTimer);
@@ -462,7 +484,7 @@ function setupEventListeners() {
         const valid = imported.every(tx =>
           tx.date && typeof tx.date === 'string' &&
           tx.symbol && typeof tx.symbol === 'string' &&
-          (tx.type === 'buy' || tx.type === 'sell') &&
+          (tx.type === 'buy' || tx.type === 'sell' || tx.type === 'cash_dividend' || tx.type === 'stock_dividend') &&
           typeof tx.count === 'number' && tx.count > 0 &&
           typeof tx.price === 'number' && tx.price >= 0
         );
@@ -1564,6 +1586,8 @@ function renderDashboardUI() {
     renderTechnicalView();
   } else if (state.currentView === 'history') {
     renderHistoryView();
+  } else if (state.currentView === 'sellplan') {
+    renderSellPlanView();
   }
 }
 
@@ -1584,7 +1608,8 @@ function switchDashboardView(view) {
     'portfolio': 'Portfolio Viewer',
     'technical': 'Technical Chart Gallery',
     'momentum': 'Momentum Trends',
-    'history': 'Transaction History'
+    'history': 'Transaction History',
+    'sellplan': 'Sell Plan'
   };
   document.getElementById("view-title").innerText = viewTitles[view];
 
@@ -1792,7 +1817,7 @@ function renderPortfolioView() {
       holdings[symbol].remainingShares += txCount;
       holdings[symbol].netCashFlow -= spent;
       totalCashFlow -= spent;
-    } else {
+    } else if (tx.type === 'sell') {
       const earned = rawTotal - commission;
       // Clamp to prevent negative remaining shares
       const sellCount = Math.min(txCount, holdings[symbol].totalSharesBought);
@@ -1809,6 +1834,18 @@ function renderPortfolioView() {
       holdings[symbol].remainingShares -= txCount;
       holdings[symbol].netCashFlow += earned;
       totalCashFlow += earned;
+    } else if (tx.type === 'cash_dividend') {
+      // Cash dividend: income received = count * price_per_share (dividend rate)
+      const dividendIncome = rawTotal;
+      holdings[symbol].realisedPL += dividendIncome;
+      holdings[symbol].totalRawEarned += dividendIncome;
+      holdings[symbol].netCashFlow += dividendIncome;
+      totalCashFlow += dividendIncome;
+    } else if (tx.type === 'stock_dividend') {
+      // Stock/bonus dividend: free shares received at zero cost
+      holdings[symbol].totalSharesBought += txCount;
+      holdings[symbol].remainingShares += txCount;
+      // No cash impact, no cost impact - this naturally lowers the avg price
     }
   });
 
@@ -2072,7 +2109,7 @@ function downloadPortfolioCSV() {
       holdings[symbol].totalRawInvested += rawTotal;
       holdings[symbol].remainingShares += txCount;
       holdings[symbol].netCashFlow -= spent;
-    } else {
+    } else if (tx.type === 'sell') {
       const earned = rawTotal - commission;
       const sellCount = Math.min(txCount, holdings[symbol].totalSharesBought);
       const avgCostPerShare = holdings[symbol].totalSharesBought > 0 ? (holdings[symbol].totalCashInvested / holdings[symbol].totalSharesBought) : 0;
@@ -2083,6 +2120,14 @@ function downloadPortfolioCSV() {
       holdings[symbol].totalCashInvested -= costOfSoldShares;
       holdings[symbol].remainingShares -= txCount;
       holdings[symbol].netCashFlow += earned;
+    } else if (tx.type === 'cash_dividend') {
+      const dividendIncome = rawTotal;
+      holdings[symbol].realisedPL += dividendIncome;
+      holdings[symbol].totalRawEarned += dividendIncome;
+      holdings[symbol].netCashFlow += dividendIncome;
+    } else if (tx.type === 'stock_dividend') {
+      holdings[symbol].totalSharesBought += txCount;
+      holdings[symbol].remainingShares += txCount;
     }
   });
 
@@ -2198,7 +2243,7 @@ function showAvgPriceBreakdown(symbol) {
         netPool,
         avgAfter
       });
-    } else {
+    } else if (tx.type === 'sell') {
       const sellCount = Math.min(count, totalShares);
       totalShares -= sellCount;
       totalRawEarned += rawTotal;
@@ -2211,6 +2256,40 @@ function showAvgPriceBreakdown(symbol) {
         price,
         rawTotal,
         commPct,
+        totalShares,
+        totalRawSpent,
+        totalRawEarned,
+        netPool,
+        avgAfter
+      });
+    } else if (tx.type === 'cash_dividend') {
+      totalRawEarned += rawTotal;
+      const netPool = totalRawSpent - totalRawEarned;
+      const avgAfter = totalShares > 0 ? (netPool / totalShares) : 0;
+      steps.push({
+        date: tx.date,
+        type: 'Cash Div',
+        count,
+        price,
+        rawTotal,
+        commPct: 0,
+        totalShares,
+        totalRawSpent,
+        totalRawEarned,
+        netPool,
+        avgAfter
+      });
+    } else if (tx.type === 'stock_dividend') {
+      totalShares += count;
+      const netPool = totalRawSpent - totalRawEarned;
+      const avgAfter = totalShares > 0 ? (netPool / totalShares) : 0;
+      steps.push({
+        date: tx.date,
+        type: 'Stock Div',
+        count,
+        price: 0,
+        rawTotal: 0,
+        commPct: 0,
         totalShares,
         totalRawSpent,
         totalRawEarned,
@@ -2256,7 +2335,7 @@ function showAvgPriceBreakdown(symbol) {
                 <tr>
                   <td style="color:var(--text-muted);">${i + 1}</td>
                   <td>${s.date}</td>
-                  <td><span class="type-pill ${s.type.toLowerCase()}">${s.type}</span></td>
+                  <td><span class="type-pill ${s.type === 'Cash Div' ? 'dividend' : s.type === 'Stock Div' ? 'bonus' : s.type.toLowerCase()}">${s.type}</span></td>
                   <td>${s.count}</td>
                   <td>৳${s.price.toFixed(2)}</td>
                   <td class="${s.type === 'Buy' ? '' : 'positive'}">৳${s.rawTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
@@ -2407,6 +2486,258 @@ function renderPortfolioPieChart(data, totalValue) {
     <div class="pie-chart-wrap">${svg}</div>
     <div class="pie-legend-wrap">${legend}</div>
   `;
+}
+
+function getSellPlanHoldings() {
+  const holdings = {};
+  state.history.forEach(tx => {
+    const symbol = tx.symbol;
+    if (!holdings[symbol]) holdings[symbol] = { remainingShares: 0, netCashFlow: 0 };
+    const txCount = parseFloat(tx.count);
+    const txPrice = parseFloat(tx.price);
+    const commPct = getEffectiveCommission(tx.commission);
+    const rawTotal = txCount * txPrice;
+    const comm = rawTotal * (commPct / 100);
+    if (tx.type === 'buy') {
+      holdings[symbol].remainingShares += txCount;
+      holdings[symbol].netCashFlow -= (rawTotal + comm);
+    } else {
+      holdings[symbol].remainingShares -= txCount;
+      holdings[symbol].netCashFlow += (rawTotal - comm);
+    }
+  });
+  return holdings;
+}
+
+function renderSellPlanView() {
+  renderCapitalRecovery();
+  renderTieredProfitTaking();
+}
+
+function renderCapitalRecovery() {
+  const tbody = document.getElementById("sellplan-recovery-content");
+  if (!tbody) return;
+
+  const holdings = getSellPlanHoldings();
+  const symbols = Object.keys(holdings).filter(s => holdings[s].remainingShares > 0);
+
+  if (symbols.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:32px; color:var(--text-muted);">No active holdings.</td></tr>`;
+    return;
+  }
+
+  const fmtP = v => `৳${v.toFixed(2)}`;
+  const fmtR = v => `৳${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  let totalInvested = 0, totalFreeVal8 = 0, totalFreeVal12 = 0, totalFreeVal20 = 0;
+
+  const rows = symbols.map(symbol => {
+    const h = holdings[symbol];
+    const data = state.instruments[symbol];
+    const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
+    const totalShares = h.remainingShares;
+    const invested = -h.netCashFlow;
+    const avgCost = totalShares > 0 ? Math.max(0, invested / totalShares) : 0;
+    const stopLossPrice = avgCost * 0.97;
+
+    // At each target price, how many shares must be sold to recover full investment?
+    const calcRecovery = (targetPrice) => {
+      if (targetPrice <= 0) return { sell: totalShares, free: 0, freeVal: 0 };
+      const sharesToSell = Math.ceil(invested / targetPrice);
+      const sell = Math.min(sharesToSell, totalShares);
+      const free = totalShares - sell;
+      return { sell, free, freeVal: free * targetPrice };
+    };
+
+    const p8Price = avgCost * 1.08;
+    const p12Price = avgCost * 1.12;
+    const p20Price = avgCost * 1.20;
+
+    const r8 = calcRecovery(p8Price);
+    const r12 = calcRecovery(p12Price);
+    const r20 = calcRecovery(p20Price);
+
+    totalInvested += invested;
+    totalFreeVal8 += r8.freeVal;
+    totalFreeVal12 += r12.freeVal;
+    totalFreeVal20 += r20.freeVal;
+
+    const renderTier = (r, price) => `
+      <td class="sellplan-cell-profit" style="text-align:center;">${r.sell}
+        <span class="sellplan-total">@ ${fmtP(price)}</span>
+      </td>
+      <td class="sellplan-cell-profit" style="text-align:center;">
+        <span class="sellplan-free">${r.free}</span>
+      </td>
+      <td class="sellplan-cell-profit" style="text-align:center;">
+        <span class="sellplan-free-value">${fmtR(r.freeVal)}</span>
+      </td>
+    `;
+
+    return `
+      <tr>
+        <td style="font-weight:700;">${symbol}</td>
+        <td>${totalShares}</td>
+        <td>${fmtR(invested)}</td>
+        <td class="sellplan-cell-loss">
+          <div class="sellplan-target-price">${fmtP(stopLossPrice)}</div>
+          <span class="sellplan-total">${fmtR(stopLossPrice * totalShares)}</span>
+        </td>
+        ${renderTier(r8, p8Price)}
+        ${renderTier(r12, p12Price)}
+        ${renderTier(r20, p20Price)}
+      </tr>
+    `;
+  }).join("");
+
+  const footer = `
+    <tr style="border-top:2px solid var(--border-color); font-weight:700;">
+      <td colspan="2" style="text-align:right;">Totals</td>
+      <td>${fmtR(totalInvested)}</td>
+      <td class="sellplan-cell-loss"></td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit sellplan-free-value">${fmtR(totalFreeVal8)}</td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit sellplan-free-value">${fmtR(totalFreeVal12)}</td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit sellplan-free-value">${fmtR(totalFreeVal20)}</td>
+    </tr>
+  `;
+
+  tbody.innerHTML = rows + footer;
+}
+
+function renderTieredProfitTaking() {
+  const tbody = document.getElementById("sellplan-content");
+  if (!tbody) return;
+
+  const pct1 = parseInt(document.getElementById("sellplan-pct1")?.value) || 30;
+  const pct2 = parseInt(document.getElementById("sellplan-pct2")?.value) || 30;
+  const pct3 = parseInt(document.getElementById("sellplan-pct3")?.value) || 40;
+
+  const thP8 = document.getElementById("sellplan-th-p8");
+  const thP12 = document.getElementById("sellplan-th-p12");
+  const thP20 = document.getElementById("sellplan-th-p20");
+  if (thP8) thP8.textContent = `Sell ${pct1}% @ +8%`;
+  if (thP12) thP12.textContent = `Sell ${pct2}% @ +12%`;
+  if (thP20) thP20.textContent = `Sell ${pct3}% @ +20%`;
+
+  const applyBtn = document.getElementById("sellplan-apply-btn");
+  if (applyBtn && !applyBtn._bound) {
+    applyBtn._bound = true;
+    applyBtn.addEventListener("click", () => renderTieredProfitTaking());
+  }
+
+  const holdings = getSellPlanHoldings();
+  const symbols = Object.keys(holdings).filter(s => holdings[s].remainingShares > 0);
+
+  if (symbols.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:32px; color:var(--text-muted);">No active holdings.</td></tr>`;
+    return;
+  }
+
+  const fmtP = v => `৳${v.toFixed(2)}`;
+  const fmtR = v => `৳${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  let grandInvested = 0, grandRev1 = 0, grandRev2 = 0, grandRev3 = 0;
+
+  const rows = symbols.map(symbol => {
+    const h = holdings[symbol];
+    const data = state.instruments[symbol];
+    const currentPrice = data ? (parseFloat(data.close) || 0) : 0;
+    const totalShares = h.remainingShares;
+    const invested = -h.netCashFlow;
+    const avgCost = totalShares > 0 ? Math.max(0, invested / totalShares) : 0;
+
+    const stopLossPrice = avgCost * 0.97;
+    const p8Price = avgCost * 1.08;
+    const p12Price = avgCost * 1.12;
+    const p20Price = avgCost * 1.20;
+
+    const sell1 = Math.floor(totalShares * pct1 / 100);
+    const sell2 = Math.floor(totalShares * pct2 / 100);
+    const sell3 = totalShares - sell1 - sell2;
+
+    const rev1 = sell1 * p8Price;
+    const rev2 = sell2 * p12Price;
+    const rev3 = sell3 * p20Price;
+
+    grandInvested += invested;
+    grandRev1 += rev1;
+    grandRev2 += rev2;
+    grandRev3 += rev3;
+
+    const plPct = avgCost > 0 ? ((currentPrice - avgCost) / avgCost) * 100 : 0;
+    let status = '', statusClass = '';
+    if (currentPrice <= 0) {
+      status = '—';
+    } else if (currentPrice <= stopLossPrice) {
+      status = '🔴 Stop Loss'; statusClass = 'negative';
+    } else if (currentPrice >= p20Price) {
+      status = '🟢 Sell All'; statusClass = 'positive';
+    } else if (currentPrice >= p12Price) {
+      status = '🟢 Sell T1+T2'; statusClass = 'positive';
+    } else if (currentPrice >= p8Price) {
+      status = '🟡 Sell T1'; statusClass = '';
+    } else {
+      status = `${plPct >= 0 ? '⬆' : '⬇'} ${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%`;
+      statusClass = plPct >= 0 ? 'positive' : 'negative';
+    }
+
+    return `
+      <tr>
+        <td style="font-weight:700;">${symbol}</td>
+        <td>${totalShares}</td>
+        <td>${fmtP(avgCost)}</td>
+        <td style="font-weight:600;">${currentPrice > 0 ? fmtP(currentPrice) : '—'}</td>
+        <td class="sellplan-cell-loss">
+          <div class="sellplan-target-price">${fmtP(stopLossPrice)}</div>
+          <span class="sellplan-total">${fmtR(stopLossPrice * totalShares)}</span>
+        </td>
+        <td class="sellplan-cell-profit">${sell1}</td>
+        <td class="sellplan-cell-profit">
+          <div class="sellplan-target-price">${fmtP(p8Price)}</div>
+          <span class="sellplan-total">${fmtR(rev1)}</span>
+        </td>
+        <td class="sellplan-cell-profit">${sell2}</td>
+        <td class="sellplan-cell-profit">
+          <div class="sellplan-target-price">${fmtP(p12Price)}</div>
+          <span class="sellplan-total">${fmtR(rev2)}</span>
+        </td>
+        <td class="sellplan-cell-profit">${sell3}</td>
+        <td class="sellplan-cell-profit">
+          <div class="sellplan-target-price">${fmtP(p20Price)}</div>
+          <span class="sellplan-total">${fmtR(rev3)}</span>
+        </td>
+        <td class="${statusClass}" style="font-weight:600; white-space:nowrap;">${status}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const totalRev = grandRev1 + grandRev2 + grandRev3;
+  const totalProfit = totalRev - grandInvested;
+  const profitPct = grandInvested > 0 ? (totalProfit / grandInvested * 100) : 0;
+
+  const footer = `
+    <tr style="border-top:2px solid var(--border-color); font-weight:700;">
+      <td colspan="4" style="text-align:right;">Total Invested: ${fmtR(grandInvested)}</td>
+      <td class="sellplan-cell-loss"></td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit">${fmtR(grandRev1)}</td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit">${fmtR(grandRev2)}</td>
+      <td class="sellplan-cell-profit"></td>
+      <td class="sellplan-cell-profit">${fmtR(grandRev3)}</td>
+      <td class="${totalProfit >= 0 ? 'positive' : 'negative'}" style="white-space:nowrap;">
+        ${totalProfit >= 0 ? '+' : ''}${fmtR(totalProfit)} (${profitPct.toFixed(1)}%)
+      </td>
+    </tr>
+  `;
+
+  tbody.innerHTML = rows + footer;
 }
 
 async function addTransactionFromForm() {
@@ -2562,14 +2893,17 @@ function renderHistoryView() {
     return dir === 'asc' ? cmp : -cmp;
   });
 
-  tbody.innerHTML = rows.map(tx => `
+  tbody.innerHTML = rows.map(tx => {
+    const typeLabel = tx.type === 'cash_dividend' ? 'Cash Div' : tx.type === 'stock_dividend' ? 'Stock Div' : tx.type;
+    const typeClass = tx.type === 'cash_dividend' ? 'dividend' : tx.type === 'stock_dividend' ? 'bonus' : tx.type;
+    return `
       <tr${state.editingTransactionId === tx.id ? ' class="editing-row"' : ''}>
         <td>${tx.date}</td>
         <td style="font-weight:700;">${tx.symbol}</td>
-        <td><span class="type-pill ${tx.type}">${tx.type}</span></td>
+        <td><span class="type-pill ${typeClass}">${typeLabel}</span></td>
         <td>${tx.count}</td>
         <td>${parseFloat(tx.price).toFixed(2)}</td>
-        <td>${tx.effectiveComm}%</td>
+        <td>${tx.type === 'cash_dividend' || tx.type === 'stock_dividend' ? '—' : tx.effectiveComm + '%'}</td>
         <td style="font-weight:600;">৳ ${tx.total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
         <td>
           <div class="history-actions">
@@ -2582,7 +2916,8 @@ function renderHistoryView() {
           </div>
         </td>
       </tr>
-    `).join("");
+    `;
+  }).join("");
 
   // Sort indicators
   document.querySelectorAll("#history-table .sortable-th").forEach(th => {

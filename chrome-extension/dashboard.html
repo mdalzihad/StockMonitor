@@ -44,6 +44,10 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
             Transaction History
           </button>
+          <button class="nav-item" data-view="sellplan">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Sell Plan
+          </button>
         </div>
 
         <div class="nav-section">
@@ -65,7 +69,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <button id="settings-btn" class="nav-item">
+        <button id="settings-alerts-btn" class="nav-item">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
         </button>
@@ -270,10 +274,12 @@
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label for="hist-type">Buy/Sell</label>
+                    <label for="hist-type">Type</label>
                     <select id="hist-type" required>
                       <option value="buy">Buy</option>
                       <option value="sell">Sell</option>
+                      <option value="cash_dividend">Cash Dividend</option>
+                      <option value="stock_dividend">Stock Dividend (Bonus)</option>
                     </select>
                   </div>
                   <div class="form-group">
@@ -325,6 +331,8 @@
                   <option value="all">All Types</option>
                   <option value="buy">Buy Only</option>
                   <option value="sell">Sell Only</option>
+                  <option value="cash_dividend">Cash Dividend</option>
+                  <option value="stock_dividend">Stock Dividend</option>
                 </select>
               </div>
             </div>
@@ -438,7 +446,174 @@
           </div>
         </div>
       </section>
+
+      <!-- Sell Plan View -->
+      <section id="sellplan-view" class="dashboard-view">
+
+        <!-- Strategy 1: Capital Recovery -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header">
+            <h3>💰 Strategy 1 — Capital Recovery</h3>
+            <span style="font-size:11px; color:var(--text-muted);">Sell minimum shares to recover investment, keep the rest as free profit</span>
+          </div>
+          <div class="table-container">
+            <table class="pro-table" id="sellplan-recovery-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Stock</th>
+                  <th rowspan="2">Shares</th>
+                  <th rowspan="2">Invested</th>
+                  <th rowspan="2" class="sellplan-col-loss">Stop Loss (−3%)</th>
+                  <th colspan="3" class="sellplan-col-profit" style="text-align:center; border-bottom:1px solid var(--border-color);">Recover at +8%</th>
+                  <th colspan="3" class="sellplan-col-profit" style="text-align:center; border-bottom:1px solid var(--border-color);">Recover at +12%</th>
+                  <th colspan="3" class="sellplan-col-profit" style="text-align:center; border-bottom:1px solid var(--border-color);">Recover at +20%</th>
+                </tr>
+                <tr>
+                  <th class="sellplan-sub-th">Sell</th>
+                  <th class="sellplan-sub-th">Keep Free</th>
+                  <th class="sellplan-sub-th">Free Value</th>
+                  <th class="sellplan-sub-th">Sell</th>
+                  <th class="sellplan-sub-th">Keep Free</th>
+                  <th class="sellplan-sub-th">Free Value</th>
+                  <th class="sellplan-sub-th">Sell</th>
+                  <th class="sellplan-sub-th">Keep Free</th>
+                  <th class="sellplan-sub-th">Free Value</th>
+                </tr>
+              </thead>
+              <tbody id="sellplan-recovery-content">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Strategy 2: Tiered Profit Taking -->
+        <div class="card">
+          <div class="card-header">
+            <h3>📈 Strategy 2 — Tiered Profit Taking</h3>
+            <div class="header-actions" style="display:flex; gap:8px; align-items:center;">
+              <label style="font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
+                Split:
+                <input type="number" id="sellplan-pct1" class="drawer-alert-input" value="30" min="1" max="100" style="width:42px; text-align:center;"> /
+                <input type="number" id="sellplan-pct2" class="drawer-alert-input" value="30" min="1" max="100" style="width:42px; text-align:center;"> /
+                <input type="number" id="sellplan-pct3" class="drawer-alert-input" value="40" min="1" max="100" style="width:42px; text-align:center;"> %
+              </label>
+              <button class="btn-secondary" id="sellplan-apply-btn" style="font-size:11px; padding:4px 10px;">Apply</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="pro-table" id="sellplan-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Stock</th>
+                  <th rowspan="2">Shares</th>
+                  <th rowspan="2">Avg Cost</th>
+                  <th rowspan="2">Current</th>
+                  <th rowspan="2" class="sellplan-col-loss">Stop Loss (−3%)</th>
+                  <th colspan="2" class="sellplan-col-profit" style="text-align:center; border-bottom:1px solid var(--border-color);" id="sellplan-th-p8">Sell 30% @ +8%</th>
+                  <th colspan="2" class="sellplan-col-profit" style="text-align:center; border-bottom:1px solid var(--border-color);" id="sellplan-th-p12">Sell 30% @ +12%</th>
+                  <th colspan="2" class="sellplan-col-profit" style="text-align:center; border-bottom:1px solid var(--border-color);" id="sellplan-th-p20">Sell 40% @ +20%</th>
+                  <th rowspan="2">Status</th>
+                </tr>
+                <tr>
+                  <th class="sellplan-sub-th">Shares</th>
+                  <th class="sellplan-sub-th">Revenue</th>
+                  <th class="sellplan-sub-th">Shares</th>
+                  <th class="sellplan-sub-th">Revenue</th>
+                  <th class="sellplan-sub-th">Shares</th>
+                  <th class="sellplan-sub-th">Revenue</th>
+                </tr>
+              </thead>
+              <tbody id="sellplan-content">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- Settings & Alerts Modal -->
+  <div id="settings-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Settings & Price Alerts</h3>
+        <button id="settings-close-btn" class="btn-icon" style="border:none; width:20px; height:20px;">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Polling Interval -->
+        <div class="input-group">
+          <span class="input-label">Background Refresh Interval</span>
+          <select id="polling-interval-select" class="modal-input-select" style="width: 100%; padding: 8px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main);">
+            <option value="1">Every 1 Minute</option>
+            <option value="5">Every 5 Minutes (Recommended)</option>
+            <option value="15">Every 15 Minutes</option>
+            <option value="30">Every 30 Minutes</option>
+            <option value="60">Every 1 Hour</option>
+            <option value="0">Disabled (Manual Only)</option>
+          </select>
+        </div>
+        
+        <div class="input-group" style="margin-top: 12px;">
+          <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <span class="input-label" style="margin: 0;">Show Charts (Sparklines)</span>
+            <input type="checkbox" id="show-charts-enable" style="cursor: pointer; width: 16px; height: 16px; margin: 0;">
+          </label>
+        </div>
+        
+        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
+        
+        <!-- Price Alerts Section -->
+        <div class="alerts-section">
+          <span class="input-label">Create Price Alert</span>
+          <div class="alert-form" style="display: flex; gap: 6px; margin-top: 6px;">
+            <select id="alert-symbol-select" class="modal-input-select" style="flex: 2; padding: 6px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main); font-size: 12px;"></select>
+            <select id="alert-condition-select" class="modal-input-select" style="flex: 1.5; padding: 6px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main); font-size: 12px;">
+              <option value="above">≥</option>
+              <option value="below">≤</option>
+            </select>
+            <input type="number" id="alert-value-input" class="modal-input" placeholder="Value" style="flex: 2.5; padding: 6px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-family: var(--font-main); font-size: 12px;" step="0.01">
+            <button id="add-alert-btn" class="btn-primary" style="padding: 6px 10px; font-size: 11px;">Add</button>
+          </div>
+          
+          <span class="input-label" style="margin-top: 12px; display: block;">Active Price Alerts</span>
+          <div id="alerts-list-container" class="watchlist-management-list" style="margin-top: 6px; max-height: 110px; overflow-y: auto;">
+            <!-- Rendered dynamically in app.js -->
+          </div>
+        </div>
+        
+        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
+        
+        <!-- Google Chat Section -->
+        <div class="input-group">
+          <span class="input-label">Google Workspace Integration</span>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 4px; cursor: pointer; color: var(--text-secondary);">
+            <input type="checkbox" id="gchat-alerts-enable" style="cursor: pointer; margin: 0;">
+            Enable Google Chat Alerts
+          </label>
+          <input type="text" id="gchat-webhook-input" class="modal-input" placeholder="Paste Google Chat Webhook URL" style="margin-top: 6px; font-size: 11px; padding: 6px 8px;">
+        </div>
+
+        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 12px 0;">
+
+        <!-- Telegram Bot Section -->
+        <div class="input-group">
+          <span class="input-label">Telegram Integration</span>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 4px; cursor: pointer; color: var(--text-secondary);">
+            <input type="checkbox" id="telegram-alerts-enable" style="cursor: pointer; margin: 0;">
+            Enable Telegram Alerts
+          </label>
+          <input type="text" id="telegram-token-input" class="modal-input" placeholder="Telegram Bot Token" style="margin-top: 6px; font-size: 11px; padding: 6px 8px;">
+          <input type="text" id="telegram-chatid-input" class="modal-input" placeholder="Telegram Chat ID (e.g. 123456789)" style="margin-top: 6px; font-size: 11px; padding: 6px 8px;">
+          <span style="font-size: 9px; color: var(--text-secondary); margin-top: 2px; line-height: 1.3;">Tip: Get your numerical ID by sending /start to <b>@userinfobot</b>. You must also send /start to <b>your own bot</b> to authorize it.</span>
+          <button id="telegram-test-btn" class="btn-secondary" style="margin-top: 6px; font-size: 11px; padding: 4px 8px; width: 100%;">Test Bot Connection</button>
+        </div>
+      </div>
+      <div class="modal-footer" style="margin-top: 12px;">
+        <button id="settings-save-btn" class="btn-primary" style="width: 100%;">Save & Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Detail Drawer -->
