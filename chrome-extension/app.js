@@ -26,7 +26,10 @@ let state = {
   marketSort: { key: 'symbol', dir: 'asc' },
   marketSearch: '',
   momentumSort: { key: 'ret1m', dir: 'desc' },
-  momentumSearch: ''
+  momentumSearch: '',
+  mwSort: { key: 'pctAboveMa200', dir: 'desc' },
+  mwSearch: '',
+  mwPEData: null // P/E data fetched from DSE
 };
 
 let portfolioSearchTimer;
@@ -351,6 +354,35 @@ function setupEventListeners() {
         state.momentumSort = { key, dir: key === 'symbol' ? 'asc' : 'desc' };
       }
       renderMomentumView();
+    });
+
+    // Momentum Watch search (debounced)
+    let mwSearchTimer;
+    document.getElementById("mw-search")?.addEventListener("input", (e) => {
+      clearTimeout(mwSearchTimer);
+      mwSearchTimer = setTimeout(() => {
+        state.mwSearch = e.target.value.trim().toUpperCase();
+        renderMomentumWatchView();
+      }, 200);
+    });
+
+    // Momentum Watch table column sort
+    document.getElementById("mw-table")?.addEventListener("click", (e) => {
+      const th = e.target.closest(".sortable-th");
+      if (!th) return;
+      const key = th.dataset.sortKey;
+      if (state.mwSort.key === key) {
+        state.mwSort.dir = state.mwSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.mwSort = { key, dir: key === 'symbol' ? 'asc' : 'desc' };
+      }
+      renderMomentumWatchView();
+    });
+
+    // Momentum Watch refresh button
+    document.getElementById("mw-refresh-btn")?.addEventListener("click", () => {
+      state.mwPEData = null;
+      fetchDSEPEData().then(() => renderMomentumWatchView());
     });
 
     document.getElementById("add-holding-btn")?.addEventListener("click", () => {
@@ -1635,6 +1667,8 @@ function renderDashboardUI() {
     renderHistoryView();
   } else if (state.currentView === 'sellplan') {
     renderSellPlanView();
+  } else if (state.currentView === 'momentumwatch') {
+    renderMomentumWatchView();
   }
 }
 
@@ -3397,4 +3431,189 @@ function calculateTechnicalInsight(data) {
   if (insights.length === 0) return `<span style="color:var(--text-muted); font-size:10px;">Neutral</span>`;
 
   return `<div class="insight-tags">${insights.join("")}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Momentum Watch — Fetch DSE P/E Data
+// ═══════════════════════════════════════════════════════
+async function fetchDSEPEData() {
+  const statusEl = document.getElementById("mw-data-status");
+  if (statusEl) statusEl.textContent = "Fetching P/E from DSE...";
+
+  try {
+    const response = await fetch("https://www.dsebd.org/latest_PE.php");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const html = await response.text();
+
+    // Parse the P/E table
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const rows = doc.querySelectorAll("table tr");
+    const peData = {};
+
+    rows.forEach(row => {
+      const cells = row.querySelectorAll("td");
+      if (cells.length >= 5) {
+        const code = cells[1]?.textContent?.trim();
+        const peStr = cells[4]?.textContent?.trim(); // P/E 1* (Basic) - latest quarterly
+        if (code && peStr && peStr !== 'n/a' && peStr !== '-') {
+          const pe = parseFloat(peStr);
+          if (!isNaN(pe)) {
+            peData[code] = pe;
+          }
+        }
+      }
+    });
+
+    state.mwPEData = peData;
+    if (statusEl) {
+      statusEl.textContent = `${Object.keys(peData).length} stocks loaded`;
+      statusEl.className = "stat-change positive";
+    }
+  } catch (err) {
+    console.error("Failed to fetch DSE P/E data:", err);
+    if (statusEl) {
+      statusEl.textContent = "Failed to load P/E data";
+      statusEl.className = "stat-change negative";
+    }
+    state.mwPEData = {};
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Momentum Watch — Render View
+// ═══════════════════════════════════════════════════════
+async function renderMomentumWatchView() {
+  const tbody = document.getElementById("mw-content");
+  if (!tbody) return;
+
+  // Fetch P/E data if not already loaded
+  if (state.mwPEData === null) {
+    await fetchDSEPEData();
+  }
+
+  const peData = state.mwPEData || {};
+
+  // Build qualifying list from all instruments
+  let rows = [];
+  for (const [symbol, data] of Object.entries(state.instruments)) {
+    const close = parseFloat(data.close) || 0;
+    const ma50 = parseFloat(data['30d']) || 0;   // 30-day price as MA50 proxy
+    const ma200 = parseFloat(data['180d']) || 0;  // 180-day price as MA200 proxy
+    const category = (data.category || '').toUpperCase();
+    const pe = peData[symbol] || null;
+
+    // Apply all 5 filters
+    if (category !== 'A') continue;           // 1. Category A only
+    if (pe === null || pe <= 0) continue;     // 2. Positive EPS (P/E > 0)
+    if (close <= ma50) continue;              // 3. Price > MA50
+    if (close <= ma200) continue;             // 4. Price > MA200
+    if (ma50 <= ma200) continue;              // 5. MA50 > MA200 (golden cross)
+
+    const ret1m = ma50 > 0 ? ((close - ma50) / ma50) * 100 : 0;
+    const pctAboveMa200 = ma200 > 0 ? ((close - ma200) / ma200) * 100 : 0;
+
+    rows.push({
+      symbol,
+      close,
+      pe,
+      ma50,
+      ma200,
+      pctAboveMa200,
+      ret1m,
+      category,
+      volume: parseInt(data.volume, 10) || 0,
+      change: close - (parseFloat(data.ycp) || close)
+    });
+  }
+
+  // Search filter
+  if (state.mwSearch) {
+    rows = rows.filter(r => r.symbol.includes(state.mwSearch));
+  }
+
+  // Sort
+  const { key: sortKey, dir: sortDir } = state.mwSort;
+  rows.sort((a, b) => {
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+    if (typeof valA === 'string') {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+      return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    }
+    return sortDir === 'asc' ? valA - valB : valB - valA;
+  });
+
+  // Update sort indicators
+  document.querySelectorAll("#mw-table .sortable-th").forEach(th => {
+    const indicator = th.querySelector(".sort-indicator");
+    if (!indicator) return;
+    if (th.dataset.sortKey === sortKey) {
+      indicator.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
+      th.classList.add('sort-active');
+    } else {
+      indicator.textContent = '';
+      th.classList.remove('sort-active');
+    }
+  });
+
+  // Update summary cards
+  const countEl = document.getElementById("mw-qualifying-count");
+  if (countEl) countEl.textContent = rows.length;
+
+  const avgRetEl = document.getElementById("mw-avg-return");
+  if (avgRetEl && rows.length > 0) {
+    const avgRet = rows.reduce((sum, r) => sum + r.ret1m, 0) / rows.length;
+    avgRetEl.textContent = `${avgRet >= 0 ? '+' : ''}${avgRet.toFixed(1)}%`;
+    avgRetEl.className = `stat-value ${avgRet >= 0 ? 'positive' : 'negative'}`;
+  } else if (avgRetEl) {
+    avgRetEl.textContent = '—';
+  }
+
+  // Render table
+  const noResults = document.getElementById("mw-no-results");
+  const tableEl = document.getElementById("mw-table");
+
+  if (rows.length === 0) {
+    if (noResults) noResults.style.display = '';
+    if (tableEl) tableEl.style.display = 'none';
+    tbody.innerHTML = '';
+  } else {
+    if (noResults) noResults.style.display = 'none';
+    if (tableEl) tableEl.style.display = '';
+
+    tbody.innerHTML = rows.map(r => {
+      const changeColor = r.change >= 0 ? 'var(--green)' : 'var(--red)';
+      const pctAboveColor = r.pctAboveMa200 >= 0 ? 'var(--green)' : 'var(--red)';
+      const retColor = r.ret1m >= 0 ? 'var(--green)' : 'var(--red)';
+
+      return `
+      <tr style="border-left:3px solid var(--green);">
+        <td>
+          <div style="font-weight:700;">${r.symbol}</div>
+          <div style="font-size:10px; color:var(--text-muted);">Cat ${r.category}</div>
+        </td>
+        <td>
+          <div>৳${r.close.toFixed(2)}</div>
+          <div style="font-size:10px; color:${changeColor};">${r.change >= 0 ? '+' : ''}${r.change.toFixed(2)}</div>
+        </td>
+        <td>${r.pe.toFixed(1)}</td>
+        <td>
+          <div>৳${r.ma50.toFixed(2)}</div>
+          <div style="font-size:10px; color:var(--green);">Price ${((r.close / r.ma50 - 1) * 100).toFixed(1)}% above</div>
+        </td>
+        <td>
+          <div>৳${r.ma200.toFixed(2)}</div>
+          <div style="font-size:10px; color:var(--green);">MA50 ${((r.ma50 / r.ma200 - 1) * 100).toFixed(1)}% above</div>
+        </td>
+        <td style="font-weight:600; color:${pctAboveColor};">
+          <span class="pl-badge profit">+${r.pctAboveMa200.toFixed(1)}%</span>
+        </td>
+        <td>
+          <span class="trend-val" style="color:${retColor};">${r.ret1m >= 0 ? '+' : ''}${r.ret1m.toFixed(1)}%</span>
+        </td>
+      </tr>`;
+    }).join('');
+  }
 }

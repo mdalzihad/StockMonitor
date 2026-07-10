@@ -48,6 +48,10 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             Sell Plan
           </button>
+          <button class="nav-item" data-view="momentumwatch">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Momentum Watch
+          </button>
         </div>
 
         <div class="nav-section">
@@ -540,6 +544,70 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <!-- Momentum Watch View -->
+      <section id="momentumwatch-view" class="dashboard-view">
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+          <div class="stat-card highlight">
+            <span class="stat-label">Qualifying Stocks</span>
+            <div class="stat-value" id="mw-qualifying-count">0</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Avg 1M Return</span>
+            <div class="stat-value" id="mw-avg-return">0%</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Data Source</span>
+            <div class="stat-value" style="font-size:13px;">DSE + StockNow</div>
+            <div class="stat-change" id="mw-data-status">Loading...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Momentum Watch — Filtered Stocks</h3>
+            <div class="header-actions">
+              <button class="btn-secondary" id="mw-refresh-btn" title="Refresh P/E data from DSE">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div class="mw-criteria-bar" style="padding:8px 16px; background:var(--bg-hover); border-radius:6px; margin:0 16px 12px; font-size:12px; color:var(--text-muted); display:flex; flex-wrap:wrap; gap:8px;">
+            <span style="font-weight:600; color:var(--text-primary);">Filters:</span>
+            <span class="pl-badge profit">Category A</span>
+            <span class="pl-badge profit">EPS &gt; 0 (P/E &gt; 0)</span>
+            <span class="pl-badge profit">Price &gt; MA50 (30d)</span>
+            <span class="pl-badge profit">Price &gt; MA200 (180d)</span>
+            <span class="pl-badge profit">MA50 &gt; MA200</span>
+          </div>
+          <div class="portfolio-toolbar">
+            <div class="portfolio-search-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="mw-search" placeholder="Search by stock name..." autocomplete="off" aria-label="Search momentum watch stocks">
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="pro-table" id="mw-table">
+              <thead>
+                <tr>
+                  <th class="sortable-th" data-sort-key="symbol">Stock <span class="sort-indicator"></span></th>
+                  <th class="sortable-th" data-sort-key="close">Price <span class="sort-indicator"></span></th>
+                  <th class="sortable-th" data-sort-key="pe">P/E <span class="sort-indicator"></span></th>
+                  <th class="sortable-th" data-sort-key="ma50">MA50 (30d) <span class="sort-indicator"></span></th>
+                  <th class="sortable-th" data-sort-key="ma200">MA200 (180d) <span class="sort-indicator"></span></th>
+                  <th class="sortable-th" data-sort-key="pctAboveMa200">% Above MA200 <span class="sort-indicator"></span></th>
+                  <th class="sortable-th" data-sort-key="ret1m">1M Return <span class="sort-indicator"></span></th>
+                </tr>
+              </thead>
+              <tbody id="mw-content">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+          <div id="mw-no-results" class="empty-container" style="display:none;">No stocks match all momentum criteria.</div>
         </div>
       </section>
     </main>
