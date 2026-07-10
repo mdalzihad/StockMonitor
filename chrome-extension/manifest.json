@@ -32,7 +32,6 @@
   },
   "host_permissions": [
     "https://stocknow.com.bd/*",
-    "https://www.dsebd.org/*",
     "https://chat.googleapis.com/*",
     "https://api.telegram.org/*",
     "https://*.tradingview.com/*"
