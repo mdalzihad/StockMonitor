@@ -2059,3 +2059,134 @@ td.negative, .negative { color: var(--red); }
     color: #fbbf24;
   }
 }
+
+/* Portfolio View Toggle */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.btn-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.btn-toggle.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Portfolio Cards Grid */
+.portfolio-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.portfolio-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.portfolio-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+.portfolio-card.closed {
+  opacity: 0.55;
+}
+.portfolio-card .card-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.portfolio-card .card-accent.profit { background: var(--green); }
+.portfolio-card .card-accent.loss { background: var(--red); }
+.portfolio-card .card-accent.neutral { background: var(--border-color); }
+
+.portfolio-card .card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.portfolio-card .card-symbol {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+.portfolio-card .card-shares {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.portfolio-card .card-pl-total {
+  text-align: right;
+}
+.portfolio-card .card-pl-total .amount {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.portfolio-card .card-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.portfolio-card .metric {
+  display: flex;
+  flex-direction: column;
+}
+.portfolio-card .metric .metric-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+.portfolio-card .metric .metric-value {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.portfolio-card .card-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.portfolio-card .card-footer .avg-link {
+  font-size: 11px;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.portfolio-card .card-footer .avg-link:hover {
+  color: var(--primary-hover);
+}
+.portfolio-card .card-footer .price-vs-avg {
+  font-size: 11px;
+  font-weight: 600;
+}

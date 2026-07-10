@@ -16,6 +16,7 @@ let state = {
   portfolioSearch: '',      // Search filter text
   portfolioFilterPL: 'all', // 'all' | 'profit' | 'loss'
   portfolioFilterHolding: 'all', // 'all' | 'active' | 'closed'
+  portfolioViewMode: 'table', // 'table' | 'cards'
   drawerSymbol: null,
   editingSymbol: null,
   chartInterval: 'D',
@@ -369,6 +370,20 @@ function setupEventListeners() {
 
     document.getElementById("download-portfolio-btn")?.addEventListener("click", () => {
       downloadPortfolioCSV();
+    });
+
+    // Portfolio view mode toggle (table / cards)
+    document.getElementById("portfolio-table-view-btn")?.addEventListener("click", () => {
+      state.portfolioViewMode = 'table';
+      document.getElementById("portfolio-table-view-btn")?.classList.add('active');
+      document.getElementById("portfolio-card-view-btn")?.classList.remove('active');
+      renderPortfolioView();
+    });
+    document.getElementById("portfolio-card-view-btn")?.addEventListener("click", () => {
+      state.portfolioViewMode = 'cards';
+      document.getElementById("portfolio-card-view-btn")?.classList.add('active');
+      document.getElementById("portfolio-table-view-btn")?.classList.remove('active');
+      renderPortfolioView();
     });
 
     // Helper: compute remaining shares for a symbol from transaction history
@@ -2041,13 +2056,87 @@ function renderPortfolioView() {
     }).join("");
   }
 
-  // Avg price breakdown click handlers
+  // ── Step 9b: Render card view ──
+  const cardsContainer = document.getElementById("portfolio-cards-container");
+  if (cardsContainer) {
+    if (rows.length === 0 && allSymbols.length > 0) {
+      cardsContainer.innerHTML = '';
+    } else {
+      cardsContainer.innerHTML = rows.map(r => {
+        const plColor = r.totalPL >= 0 ? 'var(--green)' : 'var(--red)';
+        const isActive = r.remainingShares > 0;
+        const plSign = r.totalPL >= 0 ? '+' : '';
+        const accentClass = !isActive ? 'neutral' : (r.totalPL >= 0 ? 'profit' : 'loss');
+        const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
+        const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
+
+        return `
+        <div class="portfolio-card ${!isActive ? 'closed' : ''}">
+          <div class="card-accent ${accentClass}"></div>
+          <div class="card-top">
+            <div>
+              <div class="card-symbol">${r.symbol}</div>
+              <div class="card-shares">${isActive ? r.remainingShares + ' shares' : 'Closed'}</div>
+            </div>
+            <div class="card-pl-total">
+              <div class="amount" style="color:${plColor};">${plSign}৳${Math.abs(r.totalPL).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+              <span class="pl-badge ${r.totalPL >= 0 ? 'profit' : 'loss'}">${plSign}${r.totalPLPct.toFixed(1)}%</span>
+            </div>
+          </div>
+          <div class="card-metrics">
+            <div class="metric">
+              <span class="metric-label">Current Price</span>
+              <span class="metric-value">${r.currentPrice > 0 ? '৳' + r.currentPrice.toFixed(2) : '—'}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Market Value</span>
+              <span class="metric-value">৳${r.remainingValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Unrealised P/L</span>
+              <span class="metric-value ${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 0})} <span class="pl-badge ${r.unrealisedPLPct >= 0 ? 'profit' : 'loss'}">${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%</span></span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Realised P/L</span>
+              <span class="metric-value ${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 0})}</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="avg-link avg-price-card-clickable" data-symbol="${r.symbol}">Avg ৳${r.netAvgPrice.toFixed(2)}</span>
+            ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<span class="price-vs-avg" style="color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</span>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Toggle visibility based on view mode ──
+  const tableWrapper = document.getElementById('portfolio-table')?.closest('.table-container');
+  if (state.portfolioViewMode === 'cards') {
+    if (tableWrapper) tableWrapper.style.display = 'none';
+    if (cardsContainer) cardsContainer.style.display = '';
+  } else {
+    if (tableWrapper) tableWrapper.style.display = '';
+    if (cardsContainer) cardsContainer.style.display = 'none';
+  }
+
+  // Avg price breakdown click handlers (table)
   tbody.querySelectorAll(".avg-price-clickable").forEach(td => {
     td.addEventListener("click", (e) => {
       e.stopPropagation();
       showAvgPriceBreakdown(td.dataset.symbol);
     });
   });
+
+  // Avg price breakdown click handlers (cards)
+  if (cardsContainer) {
+    cardsContainer.querySelectorAll(".avg-price-card-clickable").forEach(el => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        showAvgPriceBreakdown(el.dataset.symbol);
+      });
+    });
+  }
 
   // ── Step 10: Update summary cards ──
   const totalPL = totalRealisedPL + totalUnrealisedPL;
