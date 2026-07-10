@@ -371,6 +371,33 @@ function setupEventListeners() {
       downloadPortfolioCSV();
     });
 
+    // Helper: compute remaining shares for a symbol from transaction history
+    function getPortfolioShares(symbol) {
+      if (!symbol) return 0;
+      const sym = symbol.toUpperCase();
+      let shares = 0;
+      for (const tx of state.history) {
+        if (tx.symbol.toUpperCase() !== sym) continue;
+        const count = parseFloat(tx.count) || 0;
+        if (tx.type === 'buy' || tx.type === 'stock_dividend') shares += count;
+        else if (tx.type === 'sell') shares -= count;
+      }
+      return Math.max(0, shares);
+    }
+
+    // Auto-fill shares held when type is cash_dividend and symbol is set
+    function autoFillSharesHeld() {
+      const type = document.getElementById("hist-type")?.value;
+      const symbol = document.getElementById("hist-symbol")?.value;
+      const countInput = document.getElementById("hist-count");
+      if (type === 'cash_dividend' && symbol && countInput) {
+        const shares = getPortfolioShares(symbol);
+        if (shares > 0) {
+          countInput.value = shares;
+        }
+      }
+    }
+
     // Adapt form fields based on transaction type
     document.getElementById("hist-type")?.addEventListener("change", (e) => {
       const type = e.target.value;
@@ -382,6 +409,7 @@ function setupEventListeners() {
         if (commGroup) commGroup.style.display = 'none';
         if (priceLabel) priceLabel.textContent = 'Dividend / Share';
         if (countLabel) countLabel.textContent = 'Shares Held';
+        autoFillSharesHeld();
       } else if (type === 'stock_dividend') {
         if (commGroup) commGroup.style.display = 'none';
         if (priceLabel) priceLabel.textContent = 'Price (set 0)';
@@ -392,6 +420,10 @@ function setupEventListeners() {
         if (countLabel) countLabel.textContent = 'Count (Quantity)';
       }
     });
+
+    // Auto-fill shares held when symbol changes (for cash dividend)
+    document.getElementById("hist-symbol")?.addEventListener("change", autoFillSharesHeld);
+    document.getElementById("hist-symbol")?.addEventListener("blur", autoFillSharesHeld);
 
     // Portfolio search (debounced)
     document.getElementById("portfolio-search")?.addEventListener("input", (e) => {
