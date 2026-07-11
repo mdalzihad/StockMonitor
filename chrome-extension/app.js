@@ -7,6 +7,7 @@ let state = {
   isLoading: false,
   showCharts: true, // Default to true
   portfolio: {},   // Symbol-keyed: {symbol, buyPrice, quantity}
+  stockNotes: {},  // Symbol-keyed notes: {SYMBOL: "note text"}
   history: [],     // Array of transactions: {id, date, symbol, type, count, price, commission}
   editingTransactionId: null, // ID of transaction currently being edited (null = add mode)
   currentView: 'market', // For dashboard: market, portfolio, momentum, history
@@ -83,7 +84,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Load Watchlists & Active Selection from chrome.storage.local
 async function loadStateFromStorage() {
-  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "defaultWatchlistId", "showCharts", "portfolio", "transactionHistory"]);
+  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "defaultWatchlistId", "showCharts", "portfolio", "transactionHistory", "stockNotes"]);
   
   if (data.showCharts !== undefined) {
     state.showCharts = data.showCharts;
@@ -95,6 +96,10 @@ async function loadStateFromStorage() {
 
   if (data.transactionHistory) {
     state.history = data.transactionHistory;
+  }
+
+  if (data.stockNotes) {
+    state.stockNotes = data.stockNotes;
   }
 
   if (data.watchlists && data.watchlists.length > 0) {
@@ -131,7 +136,8 @@ async function saveWatchlistsToStorage() {
     activeWatchlistId: state.activeId,
     defaultWatchlistId: state.defaultWatchlistId || state.activeId,
     portfolio: state.portfolio,
-    transactionHistory: state.history
+    transactionHistory: state.history,
+    stockNotes: state.stockNotes
   });
 }
 
@@ -2024,11 +2030,15 @@ function renderPortfolioView() {
       const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
       const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
       const isActive = r.remainingShares > 0;
+      const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
 
       return `
       <tr style="border-left:3px solid ${isActive ? plColor : 'var(--border-color)'}; ${!isActive ? 'opacity:0.55;' : ''}">
         <td>
-          <div style="font-weight:700;">${r.symbol}</div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-weight:700;">${r.symbol}</span>
+            <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'}; transition:opacity 0.15s;">${hasNote ? '📝' : '📝'}</span>
+          </div>
           ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} shares</div>` : '<div style="font-size:10px; color:var(--text-muted);">Closed</div>'}
         </td>
         <td>
@@ -2069,13 +2079,18 @@ function renderPortfolioView() {
         const accentClass = !isActive ? 'neutral' : (r.totalPL >= 0 ? 'profit' : 'loss');
         const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
         const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
+        const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
+        const notePreview = hasNote ? state.stockNotes[r.symbol].trim().slice(0, 60) + (state.stockNotes[r.symbol].trim().length > 60 ? '…' : '') : '';
 
         return `
         <div class="portfolio-card ${!isActive ? 'closed' : ''}">
           <div class="card-accent ${accentClass}"></div>
           <div class="card-top">
             <div>
-              <div class="card-symbol">${r.symbol}</div>
+              <div class="card-symbol" style="display:flex; align-items:center; gap:6px;">
+                ${r.symbol}
+                <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'};">${hasNote ? '📝' : '📝'}</span>
+              </div>
               <div class="card-shares">${isActive ? r.remainingShares + ' shares' : 'Closed'}</div>
             </div>
             <div class="card-pl-total">
@@ -2105,6 +2120,7 @@ function renderPortfolioView() {
             <span class="avg-link avg-price-card-clickable" data-symbol="${r.symbol}">Avg ৳${r.netAvgPrice.toFixed(2)}</span>
             ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<span class="price-vs-avg" style="color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</span>` : ''}
           </div>
+          ${hasNote ? `<div style="margin-top:8px; padding:8px 10px; background:var(--bg-hover); border-radius:6px; font-size:11px; color:var(--text-muted); line-height:1.4; cursor:pointer;" class="stock-note-btn" data-symbol="${r.symbol}">💡 ${notePreview}</div>` : ''}
         </div>`;
       }).join('');
     }
@@ -2137,6 +2153,14 @@ function renderPortfolioView() {
       });
     });
   }
+
+  // Stock notes click handlers (table + cards)
+  document.querySelectorAll(".stock-note-btn").forEach(el => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showStockNotesModal(el.dataset.symbol);
+    });
+  });
 
   // ── Step 10: Update summary cards ──
   const totalPL = totalRealisedPL + totalUnrealisedPL;
@@ -3397,4 +3421,79 @@ function calculateTechnicalInsight(data) {
   if (insights.length === 0) return `<span style="color:var(--text-muted); font-size:10px;">Neutral</span>`;
 
   return `<div class="insight-tags">${insights.join("")}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Stock Notes Modal
+// ═══════════════════════════════════════════════════════
+function showStockNotesModal(symbol) {
+  const existingNote = (state.stockNotes[symbol] || '').trim();
+
+  const modalHTML = `
+    <div id="stock-notes-modal" class="modal active" style="z-index:1000;">
+      <div class="modal-content" style="max-width:600px; width:90vw; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+        <div class="modal-header">
+          <div>
+            <h3 style="margin:0;">Notes — ${symbol}</h3>
+            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);">Your research findings and observations</p>
+          </div>
+          <button id="stock-notes-modal-close" class="btn-icon" style="border:none; width:24px; height:24px; cursor:pointer;">✕</button>
+        </div>
+        <div class="modal-body" style="flex:1; padding:16px;">
+          <textarea id="stock-notes-textarea" placeholder="Write your findings, observations, key metrics, reasons for buying/holding, target prices, risks, etc..."
+            style="width:100%; min-height:250px; padding:12px; border:1px solid var(--border-color); border-radius:8px; background:var(--bg-card); color:var(--text-primary); font-size:13px; line-height:1.6; resize:vertical; font-family:inherit;">${existingNote}</textarea>
+          <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
+            💡 Tip: Note down key findings like EPS trends, sector outlook, support/resistance levels, upcoming events, etc.
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; gap:8px; justify-content:space-between;">
+          <button id="stock-notes-delete" class="btn-secondary" style="color:var(--red); border-color:var(--red); ${existingNote ? '' : 'display:none;'}">Delete Note</button>
+          <div style="display:flex; gap:8px;">
+            <button id="stock-notes-cancel" class="btn-secondary">Cancel</button>
+            <button id="stock-notes-save" class="btn-primary">Save Note</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  document.getElementById("stock-notes-modal")?.remove();
+
+  // Insert modal
+  document.body.insertAdjacentHTML("beforeend", modalHTML);
+
+  // Focus textarea
+  const textarea = document.getElementById("stock-notes-textarea");
+  setTimeout(() => textarea?.focus(), 100);
+
+  // Close handler
+  const closeModal = () => document.getElementById("stock-notes-modal")?.remove();
+
+  document.getElementById("stock-notes-modal-close")?.addEventListener("click", closeModal);
+  document.getElementById("stock-notes-cancel")?.addEventListener("click", closeModal);
+  document.getElementById("stock-notes-modal")?.addEventListener("click", (e) => {
+    if (e.target.id === "stock-notes-modal") closeModal();
+  });
+
+  // Save handler
+  document.getElementById("stock-notes-save")?.addEventListener("click", async () => {
+    const noteText = textarea?.value?.trim() || '';
+    if (noteText) {
+      state.stockNotes[symbol] = noteText;
+    } else {
+      delete state.stockNotes[symbol];
+    }
+    await saveWatchlistsToStorage();
+    closeModal();
+    renderPortfolioView();
+  });
+
+  // Delete handler
+  document.getElementById("stock-notes-delete")?.addEventListener("click", async () => {
+    delete state.stockNotes[symbol];
+    await saveWatchlistsToStorage();
+    closeModal();
+    renderPortfolioView();
+  });
 }
