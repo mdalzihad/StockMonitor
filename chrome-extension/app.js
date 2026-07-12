@@ -3126,41 +3126,34 @@ function renderTechnicalView() {
 
   const chartHeight = layout === 'list' ? '500px' : '320px';
 
-  // TradingView Advanced Chart widget config
-  const studies = encodeURIComponent(JSON.stringify([
-    "STD;SMA",
-    "STD;RSI"
-  ]));
-
   activeList.symbols.forEach(symbol => {
     const card = document.createElement("div");
     card.className = `chart-card technical-card ${layout}-card`;
     
-    // Build the Advanced Chart widget URL with full features
-    const widgetUrl = `https://s.tradingview.com/widgetembed/?` + [
-      `frameElementId=tv_${symbol}`,
-      `symbol=DSEBD:${symbol}`,
-      `interval=${interval}`,
-      `hidesidetoolbar=0`,
-      `symboledit=1`,
-      `saveimage=1`,
-      `toolbarbg=1e222d`,
-      `studies=${studies}`,
-      `hideideas=1`,
-      `theme=dark`,
-      `style=1`,
-      `timezone=Asia%2FDhaka`,
-      `withdateranges=1`,
-      `showpopupbutton=1`,
-      `studies_overrides=%7B%7D`,
-      `overrides=%7B%7D`,
-      `enabled_features=%5B%5D`,
-      `disabled_features=%5B%5D`,
-      `locale=en`,
-      `utm_source=localhost`,
-      `utm_medium=widget_new`,
-      `utm_campaign=chart`
-    ].join('&');
+    // Build the Advanced Chart widget config as JSON hash
+    const widgetConfig = {
+      symbol: `DSEBD:${symbol}`,
+      interval: interval,
+      timezone: "Asia/Dhaka",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      allow_symbol_change: true,
+      save_image: true,
+      hide_side_toolbar: false,
+      withdateranges: true,
+      calendar: false,
+      studies: ["STD;SMA", "STD;RSI"],
+      show_popup_button: true,
+      popup_width: "1000",
+      popup_height: "650",
+      support_host: "https://www.tradingview.com",
+      width: "100%",
+      height: "100%"
+    };
+
+    const configHash = encodeURIComponent(JSON.stringify(widgetConfig));
+    const widgetUrl = `https://s.tradingview.com/embed-widget/advanced-chart/?locale=en#${configHash}`;
 
     card.innerHTML = `
       <div class="chart-card-header">
@@ -3168,7 +3161,6 @@ function renderTechnicalView() {
       </div>
       <div class="chart-canvas-wrapper" style="height: ${chartHeight};">
         <iframe 
-          id="tv_${symbol}"
           src="${widgetUrl}" 
           width="100%" 
           height="100%" 
