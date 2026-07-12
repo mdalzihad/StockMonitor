@@ -2178,6 +2178,11 @@ td.negative, .negative { color: var(--red); }
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* Copy row button */
+.copy-row-btn:hover {
+  opacity: 0.8 !important;
+}
+
 /* Section header rows */
 .section-header-row td {
   border-bottom: none !important;

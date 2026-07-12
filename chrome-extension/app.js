@@ -2056,6 +2056,23 @@ function renderPortfolioView() {
       : '<span class="stock-tag-badge trading" title="Trading">T</span>';
     const borderColor = !isActive ? 'var(--border-color)' : (isLongterm ? '#7c4dff' : plColor);
 
+    // Build copy text
+    const copyLines = [
+      `**${r.symbol}** (${isLongterm ? 'Long Term' : 'Trading'}${!isActive ? ' — Closed' : ''})`,
+      `Shares: ${r.remainingShares}`,
+      `Current Price: ৳${r.currentPrice > 0 ? r.currentPrice.toFixed(2) : '—'}`,
+      `Avg Cost: ৳${r.netAvgPrice.toFixed(2)}`,
+      `Market Value: ৳${r.remainingValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`,
+      `Unrealised P/L: ৳${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})} (${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%)`,
+      `Realised P/L: ৳${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
+      `Total P/L: ৳${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})} (${plSign}${r.totalPLPct.toFixed(1)}%)`,
+    ];
+    if (hasNote) {
+      copyLines.push(`Notes: ${state.stockNotes[r.symbol].trim()}`);
+    }
+    const copyText = copyLines.join('\n');
+    const escapedCopyText = copyText.replace(/'/g, "\\'").replace(/\n/g, '\\n');
+
     return `
     <tr style="border-left:3px solid ${borderColor}; ${!isActive ? 'opacity:0.55;' : ''}">
       <td>
@@ -2063,6 +2080,7 @@ function renderPortfolioView() {
           <span style="font-weight:700;">${r.symbol}</span>
           ${tagBadge}
           <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'}; transition:opacity 0.15s;">📝</span>
+          <span class="copy-row-btn" data-copy="${escapedCopyText}" title="Copy to clipboard" style="cursor:pointer; font-size:11px; opacity:0.3; transition:opacity 0.15s;">📋</span>
         </div>
         ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} shares</div>` : '<div style="font-size:10px; color:var(--text-muted);">Closed</div>'}
       </td>
@@ -2274,6 +2292,26 @@ function renderPortfolioView() {
       state.stockTags[symbol] = current === 'longterm' ? 'trading' : 'longterm';
       await saveWatchlistsToStorage();
       renderPortfolioView();
+    });
+  });
+
+  // Copy row click handlers
+  document.querySelectorAll(".copy-row-btn").forEach(el => {
+    el.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const text = el.dataset.copy.replace(/\\n/g, '\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        const orig = el.textContent;
+        el.textContent = '✅';
+        el.style.opacity = '1';
+        setTimeout(() => {
+          el.textContent = orig;
+          el.style.opacity = '0.3';
+        }, 1200);
+      } catch (err) {
+        console.error('Copy failed', err);
+      }
     });
   });
 
