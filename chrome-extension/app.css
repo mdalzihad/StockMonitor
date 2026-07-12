@@ -2161,6 +2161,17 @@ td.negative, .negative { color: var(--red); }
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* Section header rows */
+.section-header-row td {
+  border-bottom: none !important;
+}
+.section-header-row:hover {
+  background: inherit !important;
+}
+.cards-section-header {
+  min-height: 36px;
+}
+
 .portfolio-card .card-top {
   display: flex;
   justify-content: space-between;

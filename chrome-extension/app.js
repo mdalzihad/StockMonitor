@@ -2030,12 +2030,78 @@ function renderPortfolioView() {
     }
   });
 
-  // ── Step 9: Render table rows ──
+  // ── Step 9: Render table rows (split by LT / Trading sections) ──
   const noResults = document.getElementById("portfolio-no-results");
   const tableEl = document.getElementById("portfolio-table");
 
+  // Helper: render a single table row
+  const renderTableRow = (r) => {
+    const plColor = r.totalPL >= 0 ? 'var(--green)' : 'var(--red)';
+    const plBg = r.totalPL >= 0 ? 'var(--green-bg)' : 'var(--red-bg)';
+    const plSign = r.totalPL >= 0 ? '+' : '';
+    const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
+    const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
+    const isActive = r.remainingShares > 0;
+    const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
+    const tag = state.stockTags[r.symbol] || 'trading';
+    const isLongterm = tag === 'longterm';
+    const tagBadge = isLongterm
+      ? '<span class="stock-tag-badge longterm" title="Long Term">LT</span>'
+      : '<span class="stock-tag-badge trading" title="Trading">T</span>';
+    const borderColor = !isActive ? 'var(--border-color)' : (isLongterm ? '#7c4dff' : plColor);
+
+    return `
+    <tr style="border-left:3px solid ${borderColor}; ${!isActive ? 'opacity:0.55;' : ''}">
+      <td>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-weight:700;">${r.symbol}</span>
+          ${tagBadge}
+          <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'}; transition:opacity 0.15s;">📝</span>
+        </div>
+        ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} shares</div>` : '<div style="font-size:10px; color:var(--text-muted);">Closed</div>'}
+      </td>
+      <td>
+        <div>${r.currentPrice > 0 ? '৳' + r.currentPrice.toFixed(2) : '—'}</div>
+        ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<div style="font-size:10px; color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</div>` : ''}
+      </td>
+      <td>
+        <div>৳ ${r.remainingValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+        ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} × ৳${r.currentPrice.toFixed(2)}</div>` : ''}
+      </td>
+      <td class="avg-price-clickable" data-symbol="${r.symbol}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to see breakdown">
+        ৳${r.netAvgPrice.toFixed(2)}
+      </td>
+      <td>
+        <div class="${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+        ${isActive ? `<span class="pl-badge ${r.unrealisedPLPct >= 0 ? 'profit' : 'loss'}">${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%</span>` : ''}
+      </td>
+      <td class="${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+      <td>
+        <div style="font-weight:700; color:${plColor};">৳ ${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+        <span class="pl-badge ${r.totalPL >= 0 ? 'profit' : 'loss'}">${plSign}${r.totalPLPct.toFixed(1)}%</span>
+      </td>
+    </tr>`;
+  };
+
+  // Section header row for table
+  const renderSectionHeader = (label, icon, color, count, sectionValue) => {
+    return `<tr class="section-header-row" style="background:${color}; border-left:3px solid ${color.replace('0.08', '0.5')};">
+      <td colspan="7" style="padding:8px 14px; font-weight:700; font-size:13px; letter-spacing:0.3px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${icon} ${label} <span style="font-weight:400; font-size:11px; color:var(--text-muted); margin-left:4px;">(${count} stock${count !== 1 ? 's' : ''})</span></span>
+          <span style="font-size:12px; font-weight:600; color:var(--text-secondary);">৳${sectionValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+        </div>
+      </td>
+    </tr>`;
+  };
+
+  // Split rows
+  const ltRows = rows.filter(r => (state.stockTags[r.symbol] || 'trading') === 'longterm');
+  const tRows = rows.filter(r => (state.stockTags[r.symbol] || 'trading') === 'trading');
+  const ltValue = ltRows.reduce((s, r) => s + r.remainingValue, 0);
+  const tValue = tRows.reduce((s, r) => s + r.remainingValue, 0);
+
   if (rows.length === 0 && allSymbols.length > 0) {
-    // Have data but filters hid everything
     if (noResults) noResults.style.display = '';
     if (tableEl) tableEl.style.display = 'none';
     tbody.innerHTML = '';
@@ -2043,120 +2109,113 @@ function renderPortfolioView() {
     if (noResults) noResults.style.display = 'none';
     if (tableEl) tableEl.style.display = '';
 
-    tbody.innerHTML = rows.map(r => {
-      const plColor = r.totalPL >= 0 ? 'var(--green)' : 'var(--red)';
-      const plBg = r.totalPL >= 0 ? 'var(--green-bg)' : 'var(--red-bg)';
-      const plSign = r.totalPL >= 0 ? '+' : '';
-      const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
-      const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
-      const isActive = r.remainingShares > 0;
-      const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
-      const tag = state.stockTags[r.symbol] || 'trading';
-      const isLongterm = tag === 'longterm';
-      const tagBadge = isLongterm
-        ? '<span class="stock-tag-badge longterm" title="Long Term">LT</span>'
-        : '<span class="stock-tag-badge trading" title="Trading">T</span>';
-      const borderColor = !isActive ? 'var(--border-color)' : (isLongterm ? '#7c4dff' : plColor);
+    let tableHTML = '';
 
-      return `
-      <tr style="border-left:3px solid ${borderColor}; ${!isActive ? 'opacity:0.55;' : ''}">
-        <td>
-          <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-weight:700;">${r.symbol}</span>
-            ${tagBadge}
-            <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'}; transition:opacity 0.15s;">📝</span>
-          </div>
-          ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} shares</div>` : '<div style="font-size:10px; color:var(--text-muted);">Closed</div>'}
-        </td>
-        <td>
-          <div>${r.currentPrice > 0 ? '৳' + r.currentPrice.toFixed(2) : '—'}</div>
-          ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<div style="font-size:10px; color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</div>` : ''}
-        </td>
-        <td>
-          <div>৳ ${r.remainingValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-          ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} × ৳${r.currentPrice.toFixed(2)}</div>` : ''}
-        </td>
-        <td class="avg-price-clickable" data-symbol="${r.symbol}" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" title="Click to see breakdown">
-          ৳${r.netAvgPrice.toFixed(2)}
-        </td>
-        <td>
-          <div class="${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
-          ${isActive ? `<span class="pl-badge ${r.unrealisedPLPct >= 0 ? 'profit' : 'loss'}">${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%</span>` : ''}
-        </td>
-        <td class="${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳ ${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-        <td>
-          <div style="font-weight:700; color:${plColor};">৳ ${r.totalPL.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
-          <span class="pl-badge ${r.totalPL >= 0 ? 'profit' : 'loss'}">${plSign}${r.totalPLPct.toFixed(1)}%</span>
-        </td>
-      </tr>
-    `;
-    }).join("");
+    // Long Term section
+    if (ltRows.length > 0) {
+      tableHTML += renderSectionHeader('Long Term Holdings', '🔒', 'rgba(124, 77, 255, 0.08)', ltRows.length, ltValue);
+      tableHTML += ltRows.map(renderTableRow).join('');
+    }
+
+    // Trading section
+    if (tRows.length > 0) {
+      tableHTML += renderSectionHeader('Trading Stocks', '⚡', 'rgba(255, 255, 255, 0.03)', tRows.length, tValue);
+      tableHTML += tRows.map(renderTableRow).join('');
+    }
+
+    tbody.innerHTML = tableHTML;
   }
 
   // ── Step 9b: Render card view ──
   const cardsContainer = document.getElementById("portfolio-cards-container");
+
+  // Helper: render a single card
+  const renderCard = (r) => {
+    const plColor = r.totalPL >= 0 ? 'var(--green)' : 'var(--red)';
+    const isActive = r.remainingShares > 0;
+    const plSign = r.totalPL >= 0 ? '+' : '';
+    const accentClass = !isActive ? 'neutral' : (r.totalPL >= 0 ? 'profit' : 'loss');
+    const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
+    const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
+    const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
+    const notePreview = hasNote ? state.stockNotes[r.symbol].trim().slice(0, 60) + (state.stockNotes[r.symbol].trim().length > 60 ? '…' : '') : '';
+    const tag = state.stockTags[r.symbol] || 'trading';
+    const isLongterm = tag === 'longterm';
+    const tagBadge = isLongterm
+      ? '<span class="stock-tag-badge longterm" title="Long Term">LT</span>'
+      : '<span class="stock-tag-badge trading" title="Trading">T</span>';
+    const cardAccent = !isActive ? 'neutral' : (isLongterm ? 'longterm' : accentClass);
+
+    return `
+    <div class="portfolio-card ${!isActive ? 'closed' : ''} ${isLongterm ? 'longterm-card' : ''}">
+      <div class="card-accent ${cardAccent}"></div>
+      <div class="card-top">
+        <div>
+          <div class="card-symbol" style="display:flex; align-items:center; gap:6px;">
+            ${r.symbol}
+            ${tagBadge}
+            <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'};">📝</span>
+          </div>
+          <div class="card-shares">${isActive ? r.remainingShares + ' shares' : 'Closed'}</div>
+        </div>
+        <div class="card-pl-total">
+          <div class="amount" style="color:${plColor};">${plSign}৳${Math.abs(r.totalPL).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+          <span class="pl-badge ${r.totalPL >= 0 ? 'profit' : 'loss'}">${plSign}${r.totalPLPct.toFixed(1)}%</span>
+        </div>
+      </div>
+      <div class="card-metrics">
+        <div class="metric">
+          <span class="metric-label">Current Price</span>
+          <span class="metric-value">${r.currentPrice > 0 ? '৳' + r.currentPrice.toFixed(2) : '—'}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Market Value</span>
+          <span class="metric-value">৳${r.remainingValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Unrealised P/L</span>
+          <span class="metric-value ${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 0})} <span class="pl-badge ${r.unrealisedPLPct >= 0 ? 'profit' : 'loss'}">${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%</span></span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Realised P/L</span>
+          <span class="metric-value ${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 0})}</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span class="avg-link avg-price-card-clickable" data-symbol="${r.symbol}">Avg ৳${r.netAvgPrice.toFixed(2)}</span>
+        ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<span class="price-vs-avg" style="color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</span>` : ''}
+      </div>
+      ${hasNote ? `<div style="margin-top:8px; padding:8px 10px; background:var(--bg-hover); border-radius:6px; font-size:11px; color:var(--text-muted); line-height:1.4; cursor:pointer;" class="stock-note-btn" data-symbol="${r.symbol}">💡 ${notePreview}</div>` : ''}
+    </div>`;
+  };
+
+  // Card section header
+  const renderCardSectionHeader = (label, icon, color, count, sectionValue) => {
+    return `<div class="cards-section-header" style="grid-column:1/-1; padding:10px 14px; margin:4px 0; background:${color}; border-radius:8px; border-left:3px solid ${color.replace('0.08', '0.4')};">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:700; font-size:13px; letter-spacing:0.3px;">${icon} ${label} <span style="font-weight:400; font-size:11px; color:var(--text-muted);">(${count})</span></span>
+        <span style="font-size:12px; font-weight:600; color:var(--text-secondary);">৳${sectionValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+      </div>
+    </div>`;
+  };
+
   if (cardsContainer) {
     if (rows.length === 0 && allSymbols.length > 0) {
       cardsContainer.innerHTML = '';
     } else {
-      cardsContainer.innerHTML = rows.map(r => {
-        const plColor = r.totalPL >= 0 ? 'var(--green)' : 'var(--red)';
-        const isActive = r.remainingShares > 0;
-        const plSign = r.totalPL >= 0 ? '+' : '';
-        const accentClass = !isActive ? 'neutral' : (r.totalPL >= 0 ? 'profit' : 'loss');
-        const priceCompare = r.priceVsAvg >= 0 ? '▲' : '▼';
-        const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
-        const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
-        const notePreview = hasNote ? state.stockNotes[r.symbol].trim().slice(0, 60) + (state.stockNotes[r.symbol].trim().length > 60 ? '…' : '') : '';
-        const tag = state.stockTags[r.symbol] || 'trading';
-        const isLongterm = tag === 'longterm';
-        const tagBadge = isLongterm
-          ? '<span class="stock-tag-badge longterm" title="Long Term">LT</span>'
-          : '<span class="stock-tag-badge trading" title="Trading">T</span>';
-        const cardAccent = !isActive ? 'neutral' : (isLongterm ? 'longterm' : accentClass);
+      let cardsHTML = '';
 
-        return `
-        <div class="portfolio-card ${!isActive ? 'closed' : ''} ${isLongterm ? 'longterm-card' : ''}">
-          <div class="card-accent ${cardAccent}"></div>
-          <div class="card-top">
-            <div>
-              <div class="card-symbol" style="display:flex; align-items:center; gap:6px;">
-                ${r.symbol}
-                ${tagBadge}
-                <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'};">📝</span>
-              </div>
-              <div class="card-shares">${isActive ? r.remainingShares + ' shares' : 'Closed'}</div>
-            </div>
-            <div class="card-pl-total">
-              <div class="amount" style="color:${plColor};">${plSign}৳${Math.abs(r.totalPL).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-              <span class="pl-badge ${r.totalPL >= 0 ? 'profit' : 'loss'}">${plSign}${r.totalPLPct.toFixed(1)}%</span>
-            </div>
-          </div>
-          <div class="card-metrics">
-            <div class="metric">
-              <span class="metric-label">Current Price</span>
-              <span class="metric-value">${r.currentPrice > 0 ? '৳' + r.currentPrice.toFixed(2) : '—'}</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Market Value</span>
-              <span class="metric-value">৳${r.remainingValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Unrealised P/L</span>
-              <span class="metric-value ${r.unrealisedPL >= 0 ? 'positive' : 'negative'}">৳${r.unrealisedPL.toLocaleString(undefined, {minimumFractionDigits: 0})} <span class="pl-badge ${r.unrealisedPLPct >= 0 ? 'profit' : 'loss'}">${r.unrealisedPLPct >= 0 ? '+' : ''}${r.unrealisedPLPct.toFixed(1)}%</span></span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Realised P/L</span>
-              <span class="metric-value ${r.realisedPL >= 0 ? 'positive' : 'negative'}">৳${r.realisedPL.toLocaleString(undefined, {minimumFractionDigits: 0})}</span>
-            </div>
-          </div>
-          <div class="card-footer">
-            <span class="avg-link avg-price-card-clickable" data-symbol="${r.symbol}">Avg ৳${r.netAvgPrice.toFixed(2)}</span>
-            ${r.netAvgPrice > 0 && r.currentPrice > 0 ? `<span class="price-vs-avg" style="color:${priceCompareColor};">${priceCompare} ${Math.abs(r.priceVsAvg).toFixed(1)}% vs avg</span>` : ''}
-          </div>
-          ${hasNote ? `<div style="margin-top:8px; padding:8px 10px; background:var(--bg-hover); border-radius:6px; font-size:11px; color:var(--text-muted); line-height:1.4; cursor:pointer;" class="stock-note-btn" data-symbol="${r.symbol}">💡 ${notePreview}</div>` : ''}
-        </div>`;
-      }).join('');
+      if (ltRows.length > 0) {
+        cardsHTML += renderCardSectionHeader('Long Term Holdings', '🔒', 'rgba(124, 77, 255, 0.08)', ltRows.length, ltValue);
+        cardsHTML += ltRows.map(renderCard).join('');
+      }
+
+      if (tRows.length > 0) {
+        cardsHTML += renderCardSectionHeader('Trading Stocks', '⚡', 'rgba(255, 255, 255, 0.03)', tRows.length, tValue);
+        cardsHTML += tRows.map(renderCard).join('');
+      }
+
+      cardsContainer.innerHTML = cardsHTML;
     }
   }
 
