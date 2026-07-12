@@ -1857,25 +1857,23 @@ header {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 10px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   transition: var(--transition-smooth);
 }
 
 .stat-card:hover {
   border-color: var(--text-muted);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1);
 }
 
 .stat-card.highlight {
@@ -1889,19 +1887,19 @@ header {
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .stat-change {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   display: flex;
   align-items: center;
