@@ -1679,6 +1679,12 @@ function switchDashboardView(view) {
   };
   document.getElementById("view-title").innerText = viewTitles[view];
 
+  // Show/hide sidebar pie chart (only on portfolio view)
+  const sidebarPie = document.getElementById("sidebar-pie-section");
+  if (sidebarPie) {
+    sidebarPie.style.display = view === 'portfolio' ? '' : 'none';
+  }
+
   renderDashboardUI();
 }
 
@@ -2649,14 +2655,17 @@ function showAvgPriceBreakdown(symbol) {
 
 function renderPortfolioPieChart(data, totalValue) {
   const container = document.getElementById("portfolio-pie-container");
-  const card = document.getElementById("portfolio-pie-card");
-  if (!container || !card) return;
+  const section = document.getElementById("sidebar-pie-section");
+  if (!container) return;
 
   if (data.length === 0) {
-    card.style.display = "none";
+    if (section) section.style.display = "none";
     return;
   }
-  card.style.display = "";
+  // Only show when on portfolio view
+  if (section && state.currentView === 'portfolio') {
+    section.style.display = "";
+  }
 
   const COLORS = [
     '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6',
@@ -2664,11 +2673,11 @@ function renderPortfolioPieChart(data, totalValue) {
     '#84cc16', '#e11d48', '#7c3aed', '#0ea5e9', '#d946ef'
   ];
 
-  const size = 200;
+  const size = 140;
   const cx = size / 2;
   const cy = size / 2;
-  const outerR = 90;
-  const innerR = 55; // donut hole
+  const outerR = 62;
+  const innerR = 38; // donut hole
 
   let cumAngle = -Math.PI / 2; // start from top
   const paths = [];
@@ -2710,35 +2719,36 @@ function renderPortfolioPieChart(data, totalValue) {
 
   // Center text
   const centerText = `
-    <text x="${cx}" y="${cy - 6}" text-anchor="middle" fill="var(--text-primary)" font-size="14" font-weight="700">
+    <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="700">
       ৳${totalValue >= 1000 ? (totalValue / 1000).toFixed(0) + 'K' : totalValue.toFixed(0)}
     </text>
-    <text x="${cx}" y="${cx + 12}" text-anchor="middle" fill="var(--text-muted)" font-size="10">
+    <text x="${cx}" y="${cx + 10}" text-anchor="middle" fill="var(--text-muted)" font-size="9">
       ${data.length} stock${data.length > 1 ? 's' : ''}
     </text>
   `;
 
   const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths.join('')}${centerText}</svg>`;
 
-  // Legend
+  // Legend (compact for sidebar)
   const legend = [...data]
     .sort((a, b) => b.value - a.value)
     .map((item, i) => {
       const pct = ((item.value / totalValue) * 100).toFixed(1);
       const color = COLORS[data.indexOf(item) % COLORS.length];
       return `
-        <div class="pie-legend-item">
-          <span class="pie-legend-dot" style="background:${color};"></span>
+        <div class="pie-legend-item" style="font-size:11px; padding:2px 0;">
+          <span class="pie-legend-dot" style="background:${color}; width:8px; height:8px;"></span>
           <span class="pie-legend-symbol">${item.symbol}</span>
-          <span class="pie-legend-shares">${item.shares} shares</span>
-          <span class="pie-legend-pct">${pct}%</span>
+          <span class="pie-legend-pct" style="margin-left:auto;">${pct}%</span>
         </div>
       `;
     }).join('');
 
   container.innerHTML = `
-    <div class="pie-chart-wrap">${svg}</div>
-    <div class="pie-legend-wrap">${legend}</div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:10px; width:100%;">
+      <div class="pie-chart-wrap">${svg}</div>
+      <div class="pie-legend-wrap" style="width:100%; max-height:180px; overflow-y:auto;">${legend}</div>
+    </div>
   `;
 }
 

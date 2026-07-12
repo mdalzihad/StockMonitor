@@ -1843,32 +1843,14 @@ header {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Portfolio top row: stats + pie side by side */
-.portfolio-top-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-  align-items: stretch;
+/* Sidebar Holdings Distribution */
+.sidebar-pie-section {
+  padding: 4px 0;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
 }
-.portfolio-stats-col {
-  flex: 3;
-  min-width: 0;
-}
-.portfolio-pie-col {
-  flex: 2;
-  min-width: 260px;
-}
-.portfolio-stats-col .stats-grid {
-  margin-bottom: 0;
-  height: 100%;
-}
-@media (max-width: 700px) {
-  .portfolio-top-row {
-    flex-direction: column;
-  }
-  .portfolio-pie-col {
-    min-width: unset;
-  }
+.sidebar-pie-section .nav-label {
+  padding: 8px 16px 4px;
 }
 
 /* Cards & Stats */
