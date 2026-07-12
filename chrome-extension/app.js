@@ -8,6 +8,7 @@ let state = {
   showCharts: true, // Default to true
   portfolio: {},   // Symbol-keyed: {symbol, buyPrice, quantity}
   stockNotes: {},  // Symbol-keyed notes: {SYMBOL: "note text"}
+  stockTags: {},   // Symbol-keyed tags: {SYMBOL: 'longterm' | 'trading'} (default: trading)
   history: [],     // Array of transactions: {id, date, symbol, type, count, price, commission}
   editingTransactionId: null, // ID of transaction currently being edited (null = add mode)
   currentView: 'market', // For dashboard: market, portfolio, momentum, history
@@ -17,6 +18,7 @@ let state = {
   portfolioSearch: '',      // Search filter text
   portfolioFilterPL: 'all', // 'all' | 'profit' | 'loss'
   portfolioFilterHolding: 'all', // 'all' | 'active' | 'closed'
+  portfolioFilterType: 'all',    // 'all' | 'longterm' | 'trading'
   portfolioViewMode: 'table', // 'table' | 'cards'
   drawerSymbol: null,
   editingSymbol: null,
@@ -84,7 +86,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Load Watchlists & Active Selection from chrome.storage.local
 async function loadStateFromStorage() {
-  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "defaultWatchlistId", "showCharts", "portfolio", "transactionHistory", "stockNotes"]);
+  const data = await chrome.storage.local.get(["watchlists", "activeWatchlistId", "defaultWatchlistId", "showCharts", "portfolio", "transactionHistory", "stockNotes", "stockTags"]);
   
   if (data.showCharts !== undefined) {
     state.showCharts = data.showCharts;
@@ -100,6 +102,10 @@ async function loadStateFromStorage() {
 
   if (data.stockNotes) {
     state.stockNotes = data.stockNotes;
+  }
+
+  if (data.stockTags) {
+    state.stockTags = data.stockTags;
   }
 
   if (data.watchlists && data.watchlists.length > 0) {
@@ -137,7 +143,8 @@ async function saveWatchlistsToStorage() {
     defaultWatchlistId: state.defaultWatchlistId || state.activeId,
     portfolio: state.portfolio,
     transactionHistory: state.history,
-    stockNotes: state.stockNotes
+    stockNotes: state.stockNotes,
+    stockTags: state.stockTags
   });
 }
 
@@ -464,6 +471,12 @@ function setupEventListeners() {
     // Portfolio holding filter
     document.getElementById("portfolio-filter-holding")?.addEventListener("change", (e) => {
       state.portfolioFilterHolding = e.target.value;
+      renderPortfolioView();
+    });
+
+    // Portfolio type filter (longterm/trading)
+    document.getElementById("portfolio-filter-type")?.addEventListener("change", (e) => {
+      state.portfolioFilterType = e.target.value;
       renderPortfolioView();
     });
 
@@ -1960,6 +1973,13 @@ function renderPortfolioView() {
     rows = rows.filter(r => r.remainingShares === 0);
   }
 
+  // ── Step 5b: Apply type filter (longterm/trading) ──
+  if (state.portfolioFilterType === 'longterm') {
+    rows = rows.filter(r => (state.stockTags[r.symbol] || 'trading') === 'longterm');
+  } else if (state.portfolioFilterType === 'trading') {
+    rows = rows.filter(r => (state.stockTags[r.symbol] || 'trading') === 'trading');
+  }
+
   // ── Step 6: Apply sort ──
   const { key: sortKey, dir: sortDir } = state.portfolioSort;
   rows.sort((a, b) => {
@@ -2031,13 +2051,20 @@ function renderPortfolioView() {
       const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
       const isActive = r.remainingShares > 0;
       const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
+      const tag = state.stockTags[r.symbol] || 'trading';
+      const isLongterm = tag === 'longterm';
+      const tagBadge = isLongterm
+        ? '<span class="stock-tag-badge longterm" title="Long Term">LT</span>'
+        : '<span class="stock-tag-badge trading" title="Trading">T</span>';
+      const borderColor = !isActive ? 'var(--border-color)' : (isLongterm ? '#7c4dff' : plColor);
 
       return `
-      <tr style="border-left:3px solid ${isActive ? plColor : 'var(--border-color)'}; ${!isActive ? 'opacity:0.55;' : ''}">
+      <tr style="border-left:3px solid ${borderColor}; ${!isActive ? 'opacity:0.55;' : ''}">
         <td>
           <div style="display:flex; align-items:center; gap:6px;">
             <span style="font-weight:700;">${r.symbol}</span>
-            <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'}; transition:opacity 0.15s;">${hasNote ? '📝' : '📝'}</span>
+            ${tagBadge}
+            <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'}; transition:opacity 0.15s;">📝</span>
           </div>
           ${isActive ? `<div style="font-size:10px; color:var(--text-muted);">${r.remainingShares} shares</div>` : '<div style="font-size:10px; color:var(--text-muted);">Closed</div>'}
         </td>
@@ -2081,15 +2108,22 @@ function renderPortfolioView() {
         const priceCompareColor = r.priceVsAvg >= 0 ? 'var(--green)' : 'var(--red)';
         const hasNote = !!(state.stockNotes[r.symbol] && state.stockNotes[r.symbol].trim());
         const notePreview = hasNote ? state.stockNotes[r.symbol].trim().slice(0, 60) + (state.stockNotes[r.symbol].trim().length > 60 ? '…' : '') : '';
+        const tag = state.stockTags[r.symbol] || 'trading';
+        const isLongterm = tag === 'longterm';
+        const tagBadge = isLongterm
+          ? '<span class="stock-tag-badge longterm" title="Long Term">LT</span>'
+          : '<span class="stock-tag-badge trading" title="Trading">T</span>';
+        const cardAccent = !isActive ? 'neutral' : (isLongterm ? 'longterm' : accentClass);
 
         return `
-        <div class="portfolio-card ${!isActive ? 'closed' : ''}">
-          <div class="card-accent ${accentClass}"></div>
+        <div class="portfolio-card ${!isActive ? 'closed' : ''} ${isLongterm ? 'longterm-card' : ''}">
+          <div class="card-accent ${cardAccent}"></div>
           <div class="card-top">
             <div>
               <div class="card-symbol" style="display:flex; align-items:center; gap:6px;">
                 ${r.symbol}
-                <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'};">${hasNote ? '📝' : '📝'}</span>
+                ${tagBadge}
+                <span class="stock-note-btn" data-symbol="${r.symbol}" title="${hasNote ? 'View/edit notes' : 'Add notes'}" style="cursor:pointer; font-size:12px; opacity:${hasNote ? '1' : '0.3'};">📝</span>
               </div>
               <div class="card-shares">${isActive ? r.remainingShares + ' shares' : 'Closed'}</div>
             </div>
@@ -2159,6 +2193,22 @@ function renderPortfolioView() {
     el.addEventListener("click", (e) => {
       e.stopPropagation();
       showStockNotesModal(el.dataset.symbol);
+    });
+  });
+
+  // Stock tag badge click handlers (toggle longterm/trading)
+  document.querySelectorAll(".stock-tag-badge").forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const symbol = el.closest('tr')?.querySelector('[data-symbol]')?.dataset.symbol
+        || el.closest('.portfolio-card')?.querySelector('[data-symbol]')?.dataset.symbol
+        || el.closest('td')?.querySelector('[data-symbol]')?.dataset.symbol;
+      if (!symbol) return;
+      const current = state.stockTags[symbol] || 'trading';
+      state.stockTags[symbol] = current === 'longterm' ? 'trading' : 'longterm';
+      await saveWatchlistsToStorage();
+      renderPortfolioView();
     });
   });
 
