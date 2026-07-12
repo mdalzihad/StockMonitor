@@ -3115,7 +3115,11 @@ function renderTechnicalView() {
     return;
   }
 
-  // Clear container
+  // Clear container and dispose existing chart instances
+  if (state._lwCharts) {
+    state._lwCharts.forEach(c => { try { c.remove(); } catch(e) {} });
+  }
+  state._lwCharts = [];
   container.innerHTML = "";
   
   const interval = state.chartInterval || "D";
@@ -3124,54 +3128,181 @@ function renderTechnicalView() {
   // Apply layout class to container
   container.className = `charts-grid ${layout}-layout`;
 
-  const chartHeight = layout === 'list' ? '500px' : '320px';
+  const chartHeightPx = layout === 'list' ? 420 : 280;
 
   activeList.symbols.forEach(symbol => {
+    const data = state.instruments[symbol];
+    if (!data) return;
+
     const card = document.createElement("div");
     card.className = `chart-card technical-card ${layout}-card`;
-    
-    // Build the Advanced Chart widget config as JSON hash
-    const widgetConfig = {
-      symbol: `DSEBD:${symbol}`,
-      interval: interval,
-      timezone: "Asia/Dhaka",
-      theme: "dark",
-      style: "1",
-      locale: "en",
-      allow_symbol_change: true,
-      save_image: true,
-      hide_side_toolbar: false,
-      withdateranges: true,
-      calendar: false,
-      studies: ["STD;SMA", "STD;RSI"],
-      show_popup_button: true,
-      popup_width: "1000",
-      popup_height: "650",
-      support_host: "https://www.tradingview.com",
-      width: "100%",
-      height: "100%"
-    };
 
-    const configHash = encodeURIComponent(JSON.stringify(widgetConfig));
-    const widgetUrl = `https://s.tradingview.com/embed-widget/advanced-chart/?locale=en#${configHash}`;
+    const close = parseFloat(data.close) || 0;
+    const ycp = parseFloat(data.ycp) || close;
+    const change = close - ycp;
+    const changePct = ycp > 0 ? ((change / ycp) * 100) : 0;
+    const changeColor = change >= 0 ? 'var(--green)' : 'var(--red)';
+    const changeSign = change >= 0 ? '+' : '';
+
+    const chartContainerId = `lw-chart-${symbol.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
     card.innerHTML = `
-      <div class="chart-card-header">
-        <span class="chart-card-symbol">${symbol}</span>
+      <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px;">
+        <div>
+          <span class="chart-card-symbol" style="font-size:15px; font-weight:700;">${symbol}</span>
+          <span style="font-size:12px; color:var(--text-muted); margin-left:6px;">${data.name || ''}</span>
+        </div>
+        <div style="text-align:right;">
+          <span style="font-size:16px; font-weight:700;">৳${close.toFixed(2)}</span>
+          <span style="font-size:12px; color:${changeColor}; margin-left:6px; font-weight:600;">${changeSign}${change.toFixed(2)} (${changeSign}${changePct.toFixed(2)}%)</span>
+        </div>
       </div>
-      <div class="chart-canvas-wrapper" style="height: ${chartHeight};">
-        <iframe 
-          src="${widgetUrl}" 
-          width="100%" 
-          height="100%" 
-          style="border:none; border-radius:4px;" 
-          allowtransparency="true" 
-          scrolling="no" 
-          allowfullscreen>
-        </iframe>
+      <div id="${chartContainerId}" style="width:100%; height:${chartHeightPx}px;"></div>
+      <div style="padding:6px 14px 8px; display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--text-muted);">
+        <span>O: <strong style="color:var(--text-primary);">৳${(parseFloat(data.open) || 0).toFixed(2)}</strong></span>
+        <span>H: <strong style="color:var(--green);">৳${(parseFloat(data.high) || 0).toFixed(2)}</strong></span>
+        <span>L: <strong style="color:var(--red);">৳${(parseFloat(data.low) || 0).toFixed(2)}</strong></span>
+        <span>Vol: <strong style="color:var(--text-primary);">${parseInt(data.volume || 0).toLocaleString()}</strong></span>
+        <span>52W H: <strong>৳${(parseFloat(data.yearly_high) || 0).toFixed(2)}</strong></span>
+        <span>52W L: <strong>৳${(parseFloat(data.yearly_low) || 0).toFixed(2)}</strong></span>
       </div>
     `;
     container.appendChild(card);
+
+    // Build price data points from available snapshots
+    const now = new Date();
+    const pricePoints = [];
+    const snapshots = [
+      { key: '365d', daysAgo: 365 },
+      { key: '180d', daysAgo: 180 },
+      { key: '90d',  daysAgo: 90 },
+      { key: '30d',  daysAgo: 30 },
+      { key: '15d',  daysAgo: 15 },
+      { key: '7d',   daysAgo: 7 },
+      { key: 'ycp',  daysAgo: 1 },
+      { key: 'close', daysAgo: 0 }
+    ];
+
+    snapshots.forEach(s => {
+      const val = parseFloat(data[s.key]);
+      if (!isNaN(val) && val > 0) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - s.daysAgo);
+        pricePoints.push({
+          time: d.toISOString().split('T')[0],
+          value: val
+        });
+      }
+    });
+
+    if (pricePoints.length < 2) return;
+
+    // Remove duplicate dates and sort
+    const seen = new Set();
+    const uniquePoints = pricePoints.filter(p => {
+      if (seen.has(p.time)) return false;
+      seen.add(p.time);
+      return true;
+    }).sort((a, b) => a.time.localeCompare(b.time));
+
+    // Create chart using Lightweight Charts
+    const chartEl = document.getElementById(chartContainerId);
+    if (!chartEl || !window.LightweightCharts) return;
+
+    const isPositive = close >= (uniquePoints[0]?.value || close);
+    const lineColor = isPositive ? '#26a69a' : '#ef5350';
+    const areaTopColor = isPositive ? 'rgba(38, 166, 154, 0.28)' : 'rgba(239, 83, 80, 0.28)';
+    const areaBottomColor = isPositive ? 'rgba(38, 166, 154, 0.02)' : 'rgba(239, 83, 80, 0.02)';
+
+    const chart = LightweightCharts.createChart(chartEl, {
+      width: chartEl.clientWidth,
+      height: chartHeightPx,
+      layout: {
+        background: { type: 'solid', color: 'transparent' },
+        textColor: '#9598a1',
+        fontSize: 11
+      },
+      grid: {
+        vertLines: { color: 'rgba(42, 46, 57, 0.6)' },
+        horzLines: { color: 'rgba(42, 46, 57, 0.6)' }
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { color: 'rgba(255,255,255,0.2)', width: 1, style: 3, labelBackgroundColor: '#2962FF' },
+        horzLine: { color: 'rgba(255,255,255,0.2)', width: 1, style: 3, labelBackgroundColor: '#2962FF' }
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(42, 46, 57, 0.8)',
+        scaleMargins: { top: 0.1, bottom: 0.1 }
+      },
+      timeScale: {
+        borderColor: 'rgba(42, 46, 57, 0.8)',
+        timeVisible: false,
+        rightOffset: 2,
+        barSpacing: layout === 'list' ? 20 : 12,
+        fixLeftEdge: true,
+        fixRightEdge: true
+      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true },
+      handleScale: { mouseWheel: true, pinch: true }
+    });
+
+    // Area series for the fill
+    const areaSeries = chart.addAreaSeries({
+      lineColor: lineColor,
+      topColor: areaTopColor,
+      bottomColor: areaBottomColor,
+      lineWidth: 2,
+      priceLineVisible: true,
+      priceLineColor: lineColor,
+      priceLineWidth: 1,
+      priceLineStyle: 2,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+      crosshairMarkerBorderColor: lineColor,
+      crosshairMarkerBackgroundColor: '#1e222d'
+    });
+
+    areaSeries.setData(uniquePoints);
+
+    // Add price markers for key levels
+    const markers = [];
+    const minPoint = uniquePoints.reduce((min, p) => p.value < min.value ? p : min, uniquePoints[0]);
+    const maxPoint = uniquePoints.reduce((max, p) => p.value > max.value ? p : max, uniquePoints[0]);
+
+    if (minPoint !== maxPoint) {
+      markers.push({
+        time: maxPoint.time,
+        position: 'aboveBar',
+        color: '#26a69a',
+        shape: 'arrowDown',
+        text: `High ৳${maxPoint.value.toFixed(2)}`
+      });
+      markers.push({
+        time: minPoint.time,
+        position: 'belowBar',
+        color: '#ef5350',
+        shape: 'arrowUp',
+        text: `Low ৳${minPoint.value.toFixed(2)}`
+      });
+    }
+
+    if (markers.length > 0) {
+      markers.sort((a, b) => a.time.localeCompare(b.time));
+      areaSeries.setMarkers(markers);
+    }
+
+    chart.timeScale().fitContent();
+    state._lwCharts.push(chart);
+
+    // Resize observer
+    const resizeObserver = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        chart.applyOptions({ width: entry.contentRect.width });
+      }
+    });
+    resizeObserver.observe(chartEl);
   });
 
   // Setup timeframe buttons
