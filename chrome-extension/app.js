@@ -3124,22 +3124,55 @@ function renderTechnicalView() {
   // Apply layout class to container
   container.className = `charts-grid ${layout}-layout`;
 
+  const chartHeight = layout === 'list' ? '500px' : '320px';
+
+  // TradingView Advanced Chart widget config
+  const studies = encodeURIComponent(JSON.stringify([
+    "STD;SMA",
+    "STD;RSI"
+  ]));
+
   activeList.symbols.forEach(symbol => {
     const card = document.createElement("div");
     card.className = `chart-card technical-card ${layout}-card`;
     
-    const chartHeight = layout === 'list' ? '500px' : '320px';
-    
+    // Build the Advanced Chart widget URL with full features
+    const widgetUrl = `https://s.tradingview.com/widgetembed/?` + [
+      `frameElementId=tv_${symbol}`,
+      `symbol=DSEBD:${symbol}`,
+      `interval=${interval}`,
+      `hidesidetoolbar=0`,
+      `symboledit=1`,
+      `saveimage=1`,
+      `toolbarbg=1e222d`,
+      `studies=${studies}`,
+      `hideideas=1`,
+      `theme=dark`,
+      `style=1`,
+      `timezone=Asia%2FDhaka`,
+      `withdateranges=1`,
+      `showpopupbutton=1`,
+      `studies_overrides=%7B%7D`,
+      `overrides=%7B%7D`,
+      `enabled_features=%5B%5D`,
+      `disabled_features=%5B%5D`,
+      `locale=en`,
+      `utm_source=localhost`,
+      `utm_medium=widget_new`,
+      `utm_campaign=chart`
+    ].join('&');
+
     card.innerHTML = `
       <div class="chart-card-header">
         <span class="chart-card-symbol">${symbol}</span>
       </div>
       <div class="chart-canvas-wrapper" style="height: ${chartHeight};">
         <iframe 
-          src="https://s.tradingview.com/widgetembed/?symbol=DSEBD:${symbol}&interval=${interval}&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&hideideas=1&theme=dark&style=1&timezone=Asia/Dhaka&withdateranges=1&showpopupbutton=1&locale=en" 
+          id="tv_${symbol}"
+          src="${widgetUrl}" 
           width="100%" 
           height="100%" 
-          style="border:none;" 
+          style="border:none; border-radius:4px;" 
           allowtransparency="true" 
           scrolling="no" 
           allowfullscreen>
